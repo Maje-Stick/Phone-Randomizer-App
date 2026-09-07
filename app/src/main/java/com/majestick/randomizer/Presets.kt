@@ -1,6 +1,7 @@
 package com.majestick.randomizer
 
 import android.content.Context
+import android.widget.Toast
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -20,9 +21,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmarks
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -101,17 +104,43 @@ fun PresetBar(
     var loadedName by remember(toolId) { mutableStateOf<String?>(null) }
     var open by remember { mutableStateOf(false) }
 
-    OutlinedButton(
-        onClick = { open = true },
-        shape = RoundedCornerShape(12.dp),
-        modifier = Modifier.fillMaxWidth()
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(Icons.Filled.Bookmarks, contentDescription = null, modifier = Modifier.size(18.dp))
-        Spacer(Modifier.size(10.dp))
-        Text(
-            loadedName?.let { "Preset: $it" } ?: "Presets",
-            style = MaterialTheme.typography.titleMedium
-        )
+        OutlinedButton(
+            onClick = { open = true },
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier.weight(1f)
+        ) {
+            Icon(Icons.Filled.Bookmarks, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.size(10.dp))
+            Text(
+                loadedName?.let { "Preset: $it" } ?: "Presets",
+                style = MaterialTheme.typography.titleMedium
+            )
+        }
+
+        // Quick overwrite of whatever is loaded. No dialog on purpose -- this is
+        // the action you take dozens of times, so it should cost exactly one tap.
+        FilledTonalIconButton(
+            onClick = {
+                loadedName?.let { name ->
+                    val kept = presets.filterNot { it.name.equals(name, ignoreCase = true) }
+                    presets = (kept + Preset(name, capture())).sortedBy { it.name.lowercase() }
+                    PresetStore.save(context, toolId, presets)
+                    Toast.makeText(context, "Saved \"$name\"", Toast.LENGTH_SHORT).show()
+                }
+            },
+            enabled = loadedName != null
+        ) {
+            Icon(
+                Icons.Filled.Save,
+                contentDescription = "Update the loaded preset",
+                modifier = Modifier.size(20.dp)
+            )
+        }
     }
 
     if (open) {

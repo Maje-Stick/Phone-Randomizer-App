@@ -1,9 +1,6 @@
 package com.majestick.randomizer
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -20,7 +17,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.Button
@@ -39,11 +35,9 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.unit.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -101,75 +95,6 @@ fun ToolScaffold(
         ) {
             content()
             Spacer(Modifier.height(24.dp))
-        }
-    }
-}
-
-/**
- * The result is the loudest element in the app. Everything else stays quiet.
- */
-@Composable
-fun ResultBoard(
-    headline: String?,
-    detail: String? = null,
-    emptyHint: String
-) {
-    val clipboard = LocalClipboardManager.current
-    val style = when {
-        headline == null -> MaterialTheme.typography.bodyMedium
-        headline.length <= 5 -> MaterialTheme.typography.displayLarge
-        headline.length <= 16 -> MaterialTheme.typography.displayMedium
-        else -> MaterialTheme.typography.headlineSmall
-    }
-
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 190.dp)
-            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(20.dp))
-            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(20.dp))
-            .padding(20.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        if (headline == null) {
-            Text(
-                emptyHint,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center
-            )
-        } else {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    headline,
-                    style = style,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    textAlign = TextAlign.Center
-                )
-                if (!detail.isNullOrBlank()) {
-                    Spacer(Modifier.height(12.dp))
-                    Text(
-                        detail,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center
-                    )
-                }
-            }
-            IconButton(
-                onClick = {
-                    val text = listOfNotNull(headline, detail).joinToString("\n")
-                    clipboard.setText(AnnotatedString(text))
-                },
-                modifier = Modifier.align(Alignment.TopEnd)
-            ) {
-                Icon(
-                    Icons.Filled.ContentCopy,
-                    contentDescription = "Copy result",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
         }
     }
 }

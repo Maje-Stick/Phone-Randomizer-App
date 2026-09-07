@@ -1,25 +1,20 @@
 package com.majestick.randomizer
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -29,21 +24,10 @@ private val DATE_FORMAT: DateTimeFormatter = DateTimeFormatter.ISO_LOCAL_DATE
 @Composable
 fun CoinScreen(onBack: () -> Unit) {
     var count by rememberSaveable { mutableStateOf(1) }
-    var headline by rememberSaveable { mutableStateOf<String?>(null) }
-    var detail by rememberSaveable { mutableStateOf<String?>(null) }
+    var flips by remember { mutableStateOf<List<String>?>(null) }
 
-    ToolScaffold("Coin flip", onBack, "Flip", {
-        val flips = flipCoins(count)
-        if (flips.size == 1) {
-            headline = flips.first()
-            detail = null
-        } else {
-            val heads = flips.count { it == "Heads" }
-            headline = "$heads / ${flips.size - heads}"
-            detail = "Heads / Tails\n" + flips.joinToString(" ") { it.first().toString() }
-        }
-    }) {
-        ResultBoard(headline, detail, "Flip once, or flip a hundred times and see the split.")
+    ToolScaffold("Coin flip", onBack, "Flip", { flips = flipCoins(count) }) {
+        CoinResult(flips, "Flip once, or flip a hundred times and see the split.")
         SectionSpacer()
         PresetBar(
             toolId = "coin",
@@ -59,15 +43,14 @@ fun CoinScreen(onBack: () -> Unit) {
 fun DiceScreen(onBack: () -> Unit) {
     var count by rememberSaveable { mutableStateOf(2) }
     var sides by rememberSaveable { mutableStateOf(6) }
-    var headline by rememberSaveable { mutableStateOf<String?>(null) }
-    var detail by rememberSaveable { mutableStateOf<String?>(null) }
+    var rolls by remember { mutableStateOf<List<Int>?>(null) }
+    var notation by remember { mutableStateOf("") }
 
     ToolScaffold("Dice", onBack, "Roll ${count}d$sides", {
-        val rolls = rollDice(count, sides)
-        headline = rolls.sum().toString()
-        detail = if (rolls.size == 1) null else rolls.joinToString(" + ") + " = ${rolls.sum()}"
+        rolls = rollDice(count, sides)
+        notation = "${count}d$sides"
     }) {
-        ResultBoard(headline, detail, "Pick a die and how many. The total lands here.")
+        DiceResult(rolls, notation, "Pick a die and how many. The total lands here.")
         SectionSpacer()
         PresetBar(
             toolId = "dice",
@@ -105,22 +88,18 @@ fun NumberScreen(onBack: () -> Unit) {
     var max by rememberSaveable { mutableStateOf("100") }
     var count by rememberSaveable { mutableStateOf(1) }
     var unique by rememberSaveable { mutableStateOf(true) }
-    var headline by rememberSaveable { mutableStateOf<String?>(null) }
-    var detail by rememberSaveable { mutableStateOf<String?>(null) }
+    var numbers by remember { mutableStateOf<List<Int>?>(null) }
+    var caption by remember { mutableStateOf("") }
 
     ToolScaffold("Number range", onBack, "Generate", {
         val lo = min.toIntOrNull() ?: 1
         val hi = max.toIntOrNull() ?: 100
-        val nums = randomNumbers(lo, hi, count, unique)
-        if (nums.size == 1) {
-            headline = nums.first().toString()
-            detail = "between $lo and $hi"
-        } else {
-            headline = nums.joinToString(", ")
-            detail = "${nums.size} numbers between $lo and $hi"
-        }
+        val drawn = randomNumbers(lo, hi, count, unique)
+        numbers = drawn
+        caption = if (drawn.size == 1) "between $lo and $hi"
+        else "${drawn.size} numbers between $lo and $hi"
     }) {
-        ResultBoard(headline, detail, "Set a range. Draw one number or a whole batch.")
+        NumbersResult(numbers, caption, "Set a range. Draw one number or a whole batch.")
         SectionSpacer()
         PresetBar(
             toolId = "number",
@@ -155,21 +134,20 @@ fun PickScreen(onBack: () -> Unit) {
     var raw by rememberSaveable { mutableStateOf("") }
     var count by rememberSaveable { mutableStateOf(1) }
     var unique by rememberSaveable { mutableStateOf(true) }
-    var headline by rememberSaveable { mutableStateOf<String?>(null) }
-    var detail by rememberSaveable { mutableStateOf<String?>(null) }
+    var picked by remember { mutableStateOf<List<String>?>(null) }
+    var caption by remember { mutableStateOf("") }
 
     ToolScaffold("Pick from a list", onBack, "Pick", {
         val items = parseItems(raw)
         if (items.isEmpty()) {
-            headline = null
-            detail = null
+            picked = null
+            caption = ""
         } else {
-            val picked = pickItems(items, count, unique)
-            headline = picked.joinToString(", ")
-            detail = "from ${items.size} items"
+            picked = pickItems(items, count, unique)
+            caption = "from ${items.size} items"
         }
     }) {
-        ResultBoard(headline, detail, "Add your options below, then pick.")
+        PickResult(picked, caption, "Add your options below, then pick.")
         SectionSpacer()
         PresetBar(
             toolId = "pick",
@@ -197,14 +175,13 @@ fun PickScreen(onBack: () -> Unit) {
 @Composable
 fun ShuffleScreen(onBack: () -> Unit) {
     var raw by rememberSaveable { mutableStateOf("") }
-    var headline by rememberSaveable { mutableStateOf<String?>(null) }
+    var order by remember { mutableStateOf<List<String>?>(null) }
 
     ToolScaffold("Shuffle order", onBack, "Shuffle", {
         val items = parseItems(raw)
-        headline = if (items.isEmpty()) null
-        else Rng.shuffled(items).mapIndexed { i, s -> "${i + 1}. $s" }.joinToString("\n")
+        order = if (items.isEmpty()) null else Rng.shuffled(items)
     }) {
-        ResultBoard(headline, null, "Put a list in, get it back in a new order.")
+        ShuffleResult(order, "Put a list in, get it back in a new order.")
         SectionSpacer()
         PresetBar(
             toolId = "shuffle",
@@ -220,16 +197,13 @@ fun ShuffleScreen(onBack: () -> Unit) {
 fun TeamsScreen(onBack: () -> Unit) {
     var raw by rememberSaveable { mutableStateOf("") }
     var teams by rememberSaveable { mutableStateOf(2) }
-    var headline by rememberSaveable { mutableStateOf<String?>(null) }
+    var result by remember { mutableStateOf<List<List<String>>?>(null) }
 
     ToolScaffold("Split into teams", onBack, "Split", {
         val items = parseItems(raw)
-        headline = if (items.isEmpty()) null
-        else splitIntoTeams(items, teams)
-            .mapIndexed { i, group -> "Team ${i + 1}\n" + group.joinToString("\n") { "  $it" } }
-            .joinToString("\n\n")
+        result = if (items.isEmpty()) null else splitIntoTeams(items, teams)
     }) {
-        ResultBoard(headline, null, "Names go in, balanced teams come out.")
+        TeamsResult(result, "Names go in, balanced teams come out.")
         SectionSpacer()
         PresetBar(
             toolId = "teams",
@@ -253,20 +227,12 @@ fun PasswordScreen(onBack: () -> Unit) {
     var lower by rememberSaveable { mutableStateOf(true) }
     var digits by rememberSaveable { mutableStateOf(true) }
     var symbols by rememberSaveable { mutableStateOf(true) }
-    var headline by rememberSaveable { mutableStateOf<String?>(null) }
-    var detail by rememberSaveable { mutableStateOf<String?>(null) }
+    var password by remember { mutableStateOf<String?>(null) }
 
     ToolScaffold("Password", onBack, "Generate", {
-        val pw = generatePassword(length, upper, lower, digits, symbols)
-        if (pw.isEmpty()) {
-            headline = null
-            detail = null
-        } else {
-            headline = pw
-            detail = "${pw.length} characters. Tap the corner icon to copy."
-        }
+        password = generatePassword(length, upper, lower, digits, symbols).ifEmpty { null }
     }) {
-        ResultBoard(headline, detail, "Turn on at least one character set, then generate.")
+        PasswordResult(password, "Turn on at least one character set, then generate.")
         SectionSpacer()
         PresetBar(
             toolId = "password",
@@ -305,16 +271,10 @@ fun PasswordScreen(onBack: () -> Unit) {
 @Composable
 fun CardsScreen(onBack: () -> Unit) {
     var count by rememberSaveable { mutableStateOf(1) }
-    var headline by rememberSaveable { mutableStateOf<String?>(null) }
-    var detail by rememberSaveable { mutableStateOf<String?>(null) }
+    var cards by remember { mutableStateOf<List<String>?>(null) }
 
-    ToolScaffold("Draw cards", onBack, "Draw", {
-        val cards = drawCards(count)
-        headline = cards.joinToString("  ")
-        detail = if (cards.size == 1) "from a shuffled 52-card deck"
-        else "${cards.size} cards, no duplicates"
-    }) {
-        ResultBoard(headline, detail, "Draw from a freshly shuffled deck.")
+    ToolScaffold("Draw cards", onBack, "Draw", { cards = drawCards(count) }) {
+        CardsResult(cards, "Draw from a freshly shuffled deck.")
         SectionSpacer()
         PresetBar(
             toolId = "cards",
@@ -331,33 +291,12 @@ fun ColorScreen(onBack: () -> Unit) {
     var rgb by rememberSaveable { mutableStateOf<Int?>(null) }
 
     ToolScaffold("Random color", onBack, "Generate", { rgb = randomColor() }) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(190.dp)
-                .background(
-                    rgb?.let { Color(0xFF000000.toInt() or it) }
-                        ?: MaterialTheme.colorScheme.surfaceVariant,
-                    RoundedCornerShape(20.dp)
-                )
-                .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(20.dp)),
-            contentAlignment = Alignment.Center
-        ) {
-            if (rgb == null) {
-                Text(
-                    "Generate a color to fill this space.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
+        ColorResult(rgb, "Generate a color and its hex code lands here.")
         SectionSpacer()
-        ResultBoard(
-            rgb?.let { toHex(it) },
-            rgb?.let {
-                "R ${(it shr 16) and 0xFF}   G ${(it shr 8) and 0xFF}   B ${it and 0xFF}"
-            },
-            "The hex code will appear here."
+        Text(
+            "Every channel is drawn independently, so all 16.7 million values are equally likely.",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }
@@ -365,20 +304,19 @@ fun ColorScreen(onBack: () -> Unit) {
 @Composable
 fun WeightedScreen(onBack: () -> Unit) {
     var raw by rememberSaveable { mutableStateOf("") }
-    var headline by rememberSaveable { mutableStateOf<String?>(null) }
-    var detail by rememberSaveable { mutableStateOf<String?>(null) }
+    var winner by remember { mutableStateOf<String?>(null) }
+    var share by remember { mutableStateOf<Double?>(null) }
 
     ToolScaffold("Weighted pick", onBack, "Pick", {
         val entries = parseWeighted(raw)
-        val winner = weightedPick(entries)
-        headline = winner
-        detail = winner?.let {
-            val total = entries.sumOf { e -> e.second }
-            val w = entries.first { e -> e.first == it }.second
-            "%.1f%% chance".format(w / total * 100)
+        val picked = weightedPick(entries)
+        winner = picked
+        share = picked?.let { name ->
+            val total = entries.sumOf { it.second }
+            entries.first { it.first == name }.second / total
         }
     }) {
-        ResultBoard(headline, detail, "Give each option a weight. Bigger weight, better odds.")
+        WeightedResult(winner, share, "Give each option a weight. Bigger weight, better odds.")
         SectionSpacer()
         PresetBar(
             toolId = "weighted",
@@ -401,23 +339,21 @@ fun DateScreen(onBack: () -> Unit) {
     var start by rememberSaveable { mutableStateOf(today.toString()) }
     var end by rememberSaveable { mutableStateOf(today.plusYears(1).toString()) }
     var withTime by rememberSaveable { mutableStateOf(false) }
-    var headline by rememberSaveable { mutableStateOf<String?>(null) }
-    var detail by rememberSaveable { mutableStateOf<String?>(null) }
+    var drawn by remember { mutableStateOf<LocalDate?>(null) }
+    var drawnTime by remember { mutableStateOf<String?>(null) }
 
     ToolScaffold("Random date", onBack, "Generate", {
         val a = runCatching { LocalDate.parse(start, DATE_FORMAT) }.getOrNull()
         val b = runCatching { LocalDate.parse(end, DATE_FORMAT) }.getOrNull()
         if (a == null || b == null) {
-            headline = null
-            detail = null
+            drawn = null
+            drawnTime = null
         } else {
-            val date = randomDate(a, b)
-            headline = date.toString()
-            detail = date.dayOfWeek.name.lowercase().replaceFirstChar { it.uppercase() } +
-                if (withTime) " at ${randomTimeOfDay()}" else ""
+            drawn = randomDate(a, b)
+            drawnTime = if (withTime) randomTimeOfDay() else null
         }
     }) {
-        ResultBoard(headline, detail, "Pick a window and draw a date from inside it.")
+        DateResult(drawn, drawnTime, "Pick a window and draw a date from inside it.")
         SectionSpacer()
         PresetBar(
             toolId = "date",
@@ -431,13 +367,9 @@ fun DateScreen(onBack: () -> Unit) {
             }
         )
         SectionSpacer()
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            NumberInput("From (YYYY-MM-DD)", start, { start = it }, Modifier.weight(1f))
-        }
+        NumberInput("From (YYYY-MM-DD)", start, { start = it }, Modifier.fillMaxWidth())
         Spacer(Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            NumberInput("To (YYYY-MM-DD)", end, { end = it }, Modifier.weight(1f))
-        }
+        NumberInput("To (YYYY-MM-DD)", end, { end = it }, Modifier.fillMaxWidth())
         Spacer(Modifier.height(8.dp))
         ToggleRow("Add a time of day", withTime) { withTime = it }
     }
@@ -446,12 +378,12 @@ fun DateScreen(onBack: () -> Unit) {
 @Composable
 fun LetterScreen(onBack: () -> Unit) {
     var count by rememberSaveable { mutableStateOf(1) }
-    var headline by rememberSaveable { mutableStateOf<String?>(null) }
+    var letters by remember { mutableStateOf<List<Char>?>(null) }
 
     ToolScaffold("Random letters", onBack, "Generate", {
-        headline = randomLetters(count)
+        letters = randomLetters(count).filter { it.isLetter() }.toList()
     }) {
-        ResultBoard(headline, null, "Handy for word games and quick labels.")
+        LettersResult(letters, "Handy for word games and quick labels.")
         SectionSpacer()
         PresetBar(
             toolId = "letter",

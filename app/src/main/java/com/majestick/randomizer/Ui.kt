@@ -2,7 +2,7 @@ package com.majestick.randomizer
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -63,12 +63,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlin.math.abs
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeoutOrNull
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -134,10 +133,11 @@ fun ToolScaffold(
  * increments is the whole point -- tapping fifty times is not a UI.
  */
 @Composable
-private fun RepeatIconButton(
+fun RepeatIconButton(
     icon: ImageVector,
     description: String,
     enabled: Boolean,
+    diameter: Dp = 40.dp,
     onStep: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
@@ -146,7 +146,7 @@ private fun RepeatIconButton(
 
     Box(
         modifier = Modifier
-            .size(40.dp)
+            .size(diameter)
             .background(
                 if (enabled) MaterialTheme.colorScheme.surfaceVariant
                 else MaterialTheme.colorScheme.background,
@@ -189,102 +189,11 @@ private fun RepeatIconButton(
 }
 
 /**
- * A number you can scrub. Tap it to type an exact value; press and hold for
- * ~300ms to enter scrub mode, then the side of the box your finger sits on
- * decides direction and how far out decides speed.
+ * Shows a number. Tap it to type an exact value on the keypad.
  *
- * Position-based rather than delta-based on purpose: a delta drag runs out of
- * screen, and running out of screen should not mean running out of numbers.
- * Once scrubbing, the finger can travel anywhere -- only which side it is on
- * matters.
- *
- * Both gestures live in ONE pointerInput. Two separate handlers on the same
- * element fight, and the drag one wins, which is why tapping stopped working.
- */
-@Composable
-fun ScrubbableText(
-    text: String,
-    onTapToEdit: () -> Unit,
-    onNudge: (Int) -> Unit,
-    modifier: Modifier = Modifier,
-    style: TextStyle = TextStyle.Default
-) {
-    var scrubbing by remember { mutableStateOf(false) }
-    val pointerX = remember { mutableStateOf(0f) }
-    val boxWidth = remember { mutableStateOf(1f) }
-
-    val nudge by rememberUpdatedState(onNudge)
-    val tap by rememberUpdatedState(onTapToEdit)
-    val haptics = LocalHapticFeedback.current
-
-    LaunchedEffect(scrubbing) {
-        if (!scrubbing) return@LaunchedEffect
-        while (true) {
-            val half = (boxWidth.value / 2f).coerceAtLeast(1f)
-            val offset = pointerX.value - half
-            val reach = (abs(offset) / half).coerceIn(0f, 1.6f)
-            if (reach > 0.18f) {
-                nudge(if (offset > 0f) 1 else -1)
-                val speed = ((reach - 0.18f) / 1.42f).coerceIn(0f, 1f)
-                delay((200f - 175f * speed).toLong())
-            } else {
-                delay(60)
-            }
-        }
-    }
-
-    Text(
-        text,
-        style = style,
-        color = if (scrubbing) MaterialTheme.colorScheme.primary
-        else MaterialTheme.colorScheme.onSurface,
-        textAlign = TextAlign.Center,
-        modifier = modifier.pointerInput(Unit) {
-            awaitPointerEventScope {
-                while (true) {
-                    val down = awaitFirstDown(requireUnconsumed = false)
-                    boxWidth.value = size.width.toFloat()
-                    pointerX.value = down.position.x
-
-                    var releasedEarly = false
-                    val settled = withTimeoutOrNull(300L) {
-                        while (true) {
-                            val event = awaitPointerEvent()
-                            val change = event.changes.firstOrNull { it.id == down.id }
-                            if (change == null) {
-                                releasedEarly = true
-                                break
-                            }
-                            pointerX.value = change.position.x
-                            if (!change.pressed) {
-                                releasedEarly = true
-                                break
-                            }
-                        }
-                    }
-
-                    if (settled != null && releasedEarly) {
-                        tap()
-                    } else {
-                        scrubbing = true
-                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                        while (true) {
-                            val event = awaitPointerEvent()
-                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                            pointerX.value = change.position.x
-                            change.consume()
-                            if (!change.pressed) break
-                        }
-                        scrubbing = false
-                    }
-                }
-            }
-        }
-    )
-}
-
-/**
- * Shows a number. Tap to type it, hold to scrub it.
+ * Deliberately a plain `clickable` rather than a custom gesture: this sits
+ * inside a vertically scrolling column, and hand-rolled pointer handling here
+ * kept losing the tap to the scroll container.
  */
 @Composable
 fun EditableNumber(
@@ -329,15 +238,15 @@ fun EditableNumber(
         )
         LaunchedEffect(Unit) { focusRequester.requestFocus() }
     } else {
-        ScrubbableText(
-            text = value.toString(),
-            onTapToEdit = {
+        Text(
+            value.toString(),
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            textAlign = TextAlign.Center,
+            modifier = modifier.clickable {
                 buffer = current.toString()
                 editing = true
-            },
-            onNudge = { step -> callback((current + step).coerceIn(min, max)) },
-            modifier = modifier,
-            style = MaterialTheme.typography.titleMedium
+            }
         )
     }
 }

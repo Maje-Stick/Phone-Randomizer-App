@@ -3,12 +3,12 @@ package com.majestick.randomizer
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -52,7 +52,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.zIndex
+
+private val ROW_HEIGHT = 42.dp
+private val WEIGHT_BAR_WIDTH = 112.dp
 
 /**
  * A single-line field with a hairline border. Material's OutlinedTextField has a
@@ -78,7 +80,7 @@ private fun CompactField(
         decorationBox = { inner ->
             Box(
                 modifier = Modifier
-                    .heightIn(min = 42.dp)
+                    .heightIn(min = ROW_HEIGHT)
                     .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(10.dp))
                     .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(10.dp))
                     .padding(horizontal = 10.dp),
@@ -98,13 +100,123 @@ private fun CompactField(
 }
 
 /**
- * One row per entry: weight on the left in its own box, text beside it, remove
- * on the right. Weight defaults to 1, so an untouched list behaves like a plain
- * even-odds list.
- *
- * Tap a weight once and a nudge bar appears over that row; tap it again for the
- * keypad. Only one row can be active at a time, which is what closes the last
- * one when you move to the next.
+ * The weight control: minus and plus built into the ends of the box itself, the
+ * number in the middle. Always visible, no modes, nothing to open or dismiss.
+ * Tap or hold the ends to change it; tap the number to type one.
+ */
+@Composable
+private fun WeightBar(
+    weight: Double,
+    onWeightChange: (Double) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var editing by remember { mutableStateOf(false) }
+    var buffer by remember { mutableStateOf("") }
+    val focusRequester = remember { FocusRequester() }
+    val callback by rememberUpdatedState(onWeightChange)
+    val shape = RoundedCornerShape(10.dp)
+
+    fun commit() {
+        buffer.toDoubleOrNull()?.let { callback(it.coerceIn(0.0, 9999.0)) }
+        editing = false
+    }
+
+    Row(
+        modifier = modifier
+            .height(ROW_HEIGHT)
+            .background(MaterialTheme.colorScheme.surface, shape)
+            .border(
+                1.dp,
+                if (editing) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.outline,
+                shape
+            ),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        RepeatPressBox(
+            enabled = weight > 0.0,
+            onStep = { callback((weight - 1.0).coerceAtLeast(0.0)) },
+            modifier = Modifier
+                .width(32.dp)
+                .fillMaxHeight()
+        ) {
+            Icon(
+                Icons.Filled.Remove,
+                contentDescription = "Decrease weight",
+                tint = if (weight > 0.0) MaterialTheme.colorScheme.onSurface
+                else MaterialTheme.colorScheme.outline,
+                modifier = Modifier.size(15.dp)
+            )
+        }
+
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight(),
+            contentAlignment = Alignment.Center
+        ) {
+            if (editing) {
+                BasicTextField(
+                    value = buffer,
+                    onValueChange = { raw -> buffer = raw.filter { it.isDigit() || it == '.' } },
+                    singleLine = true,
+                    textStyle = TextStyle(
+                        color = MaterialTheme.colorScheme.primary,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center
+                    ),
+                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Decimal,
+                        imeAction = ImeAction.Done
+                    ),
+                    keyboardActions = KeyboardActions(onDone = { commit() }),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(focusRequester)
+                        .onFocusChanged { if (!it.isFocused) commit() }
+                )
+                LaunchedEffect(Unit) { focusRequester.requestFocus() }
+            } else {
+                Text(
+                    trimNumber(weight),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .fillMaxHeight()
+                        .clickable {
+                            buffer = trimNumber(weight)
+                            editing = true
+                        }
+                        .padding(top = 11.dp)
+                )
+            }
+        }
+
+        RepeatPressBox(
+            enabled = weight < 9999.0,
+            onStep = { callback((weight + 1.0).coerceAtMost(9999.0)) },
+            modifier = Modifier
+                .width(32.dp)
+                .fillMaxHeight()
+        ) {
+            Icon(
+                Icons.Filled.Add,
+                contentDescription = "Increase weight",
+                tint = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.size(15.dp)
+            )
+        }
+    }
+}
+
+/**
+ * One row per entry: the weight bar on the left, text beside it, remove on the
+ * right. Weight defaults to 1, so an untouched list is plain even odds.
  */
 @Composable
 fun EntryListEditor(
@@ -113,24 +225,8 @@ fun EntryListEditor(
 ) {
     var showPaste by remember { mutableStateOf(false) }
     var pasteText by remember { mutableStateOf("") }
-    var activeIndex by remember { mutableStateOf(-1) }
-    var editingIndex by remember { mutableStateOf(-1) }
 
-    fun dismiss() {
-        activeIndex = -1
-        editingIndex = -1
-    }
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            // Taps on empty space in the editor close the nudge bar. Children
-            // consume their own taps, so this only ever catches the gaps.
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null
-            ) { dismiss() }
-    ) {
+    Column(Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -142,124 +238,49 @@ fun EntryListEditor(
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
-                modifier = Modifier.width(58.dp)
+                modifier = Modifier.width(WEIGHT_BAR_WIDTH)
             )
             Spacer(Modifier.width(8.dp))
             Text(
-                "Entry  \u00b7  tap a weight to adjust it",
+                "Entry",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
 
         entries.forEachIndexed { index, entry ->
-            val active = index == activeIndex
-            val editing = index == editingIndex
-
-            Box(
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 6.dp)
-                    // Lift the active row so its nudge bar draws above, and
-                    // takes touches ahead of, the rows around it.
-                    .zIndex(if (active || editing) 1f else 0f)
+                    .padding(bottom = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
+                WeightBar(
+                    weight = entry.weight,
+                    onWeightChange = {
+                        onChange(entries.replaceAt(index, entry.copy(weight = it)))
+                    },
+                    modifier = Modifier.width(WEIGHT_BAR_WIDTH)
+                )
+                Spacer(Modifier.width(8.dp))
+                CompactField(
+                    value = entry.text,
+                    onValueChange = {
+                        onChange(entries.replaceAt(index, entry.copy(text = it)))
+                    },
+                    placeholder = "Entry ${index + 1}",
+                    modifier = Modifier.weight(1f)
+                )
+                IconButton(
+                    onClick = { onChange(entries.filterIndexed { i, _ -> i != index }) },
+                    modifier = Modifier.size(38.dp)
                 ) {
-                    WeightBox(
-                        weight = entry.weight,
-                        editing = editing,
-                        highlighted = active || editing,
-                        onTap = {
-                            if (active) {
-                                editingIndex = index
-                                activeIndex = -1
-                            } else {
-                                activeIndex = index
-                                editingIndex = -1
-                            }
-                        },
-                        onWeightChange = {
-                            onChange(entries.replaceAt(index, entry.copy(weight = it)))
-                        },
-                        onEditDone = { editingIndex = -1 },
-                        modifier = Modifier.width(58.dp)
+                    Icon(
+                        Icons.Filled.Close,
+                        contentDescription = "Remove entry ${index + 1}",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(17.dp)
                     )
-                    Spacer(Modifier.width(8.dp))
-                    CompactField(
-                        value = entry.text,
-                        onValueChange = {
-                            onChange(entries.replaceAt(index, entry.copy(text = it)))
-                        },
-                        placeholder = "Entry ${index + 1}",
-                        modifier = Modifier.weight(1f)
-                    )
-                    IconButton(
-                        onClick = {
-                            dismiss()
-                            onChange(entries.filterIndexed { i, _ -> i != index })
-                        },
-                        modifier = Modifier.size(38.dp)
-                    ) {
-                        Icon(
-                            Icons.Filled.Close,
-                            contentDescription = "Remove entry ${index + 1}",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(17.dp)
-                        )
-                    }
-                }
-
-                if (active) {
-                    // Sits over the row, after it in the composition, so it
-                    // draws on top and receives the touch instead of whatever
-                    // is behind it.
-                    Row(
-                        modifier = Modifier
-                            .align(Alignment.CenterStart)
-                            .padding(start = 70.dp)
-                            .background(
-                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.94f),
-                                RoundedCornerShape(20.dp)
-                            )
-                            .border(
-                                1.dp,
-                                MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
-                                RoundedCornerShape(20.dp)
-                            )
-                            .padding(horizontal = 4.dp, vertical = 3.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(2.dp)
-                    ) {
-                        RepeatIconButton(
-                            icon = Icons.Filled.Remove,
-                            description = "Decrease weight",
-                            enabled = entry.weight > 0.0,
-                            diameter = 32.dp
-                        ) {
-                            onChange(
-                                entries.replaceAt(
-                                    index,
-                                    entry.copy(weight = (entry.weight - 1.0).coerceAtLeast(0.0))
-                                )
-                            )
-                        }
-                        RepeatIconButton(
-                            icon = Icons.Filled.Add,
-                            description = "Increase weight",
-                            enabled = entry.weight < 9999.0,
-                            diameter = 32.dp
-                        ) {
-                            onChange(
-                                entries.replaceAt(
-                                    index,
-                                    entry.copy(weight = (entry.weight + 1.0).coerceAtMost(9999.0))
-                                )
-                            )
-                        }
-                    }
                 }
             }
         }
@@ -267,10 +288,7 @@ fun EntryListEditor(
         Spacer(Modifier.height(4.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(
-                onClick = {
-                    dismiss()
-                    onChange(entries + Entry(""))
-                },
+                onClick = { onChange(entries + Entry("")) },
                 shape = RoundedCornerShape(10.dp),
                 modifier = Modifier.weight(1f)
             ) {
@@ -280,7 +298,6 @@ fun EntryListEditor(
             }
             OutlinedButton(
                 onClick = {
-                    dismiss()
                     pasteText = ""
                     showPaste = true
                 },
@@ -333,86 +350,6 @@ fun EntryListEditor(
                 TextButton(onClick = { showPaste = false }) { Text("Cancel") }
             }
         )
-    }
-}
-
-/**
- * Controlled by the parent so only one row is ever active. Tap once to arm it,
- * tap again for the keypad.
- */
-@Composable
-private fun WeightBox(
-    weight: Double,
-    editing: Boolean,
-    highlighted: Boolean,
-    onTap: () -> Unit,
-    onWeightChange: (Double) -> Unit,
-    onEditDone: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    var buffer by remember { mutableStateOf("") }
-    val focusRequester = remember { FocusRequester() }
-    val callback by rememberUpdatedState(onWeightChange)
-    val done by rememberUpdatedState(onEditDone)
-
-    LaunchedEffect(editing) {
-        if (editing) buffer = trimNumber(weight)
-    }
-
-    fun commit() {
-        buffer.toDoubleOrNull()?.let { callback(it.coerceIn(0.0, 9999.0)) }
-        done()
-    }
-
-    Box(
-        modifier = modifier
-            .heightIn(min = 42.dp)
-            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(10.dp))
-            .border(
-                1.dp,
-                if (highlighted) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.outline,
-                RoundedCornerShape(10.dp)
-            )
-            .padding(horizontal = 6.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        if (editing) {
-            BasicTextField(
-                value = buffer,
-                onValueChange = { raw -> buffer = raw.filter { it.isDigit() || it == '.' } },
-                singleLine = true,
-                textStyle = TextStyle(
-                    color = MaterialTheme.colorScheme.primary,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center
-                ),
-                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Decimal,
-                    imeAction = ImeAction.Done
-                ),
-                keyboardActions = KeyboardActions(onDone = { commit() }),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .focusRequester(focusRequester)
-                    .onFocusChanged { if (!it.isFocused) commit() }
-            )
-            LaunchedEffect(Unit) { focusRequester.requestFocus() }
-        } else {
-            Text(
-                trimNumber(weight),
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Bold,
-                color = if (highlighted) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.onSurface,
-                textAlign = TextAlign.Center,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(onClick = onTap)
-            )
-        }
     }
 }
 

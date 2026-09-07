@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -126,6 +127,45 @@ fun ToolScaffold(
             Spacer(Modifier.height(24.dp))
         }
     }
+}
+
+/**
+ * Press-and-hold behaviour with no styling of its own, so callers can shape it.
+ * Used for the flat segments at each end of a weight bar.
+ */
+@Composable
+fun RepeatPressBox(
+    enabled: Boolean,
+    onStep: () -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable BoxScope.() -> Unit
+) {
+    val scope = rememberCoroutineScope()
+    val step by rememberUpdatedState(onStep)
+    val haptics = LocalHapticFeedback.current
+
+    Box(
+        modifier = modifier.pointerInput(enabled) {
+            if (!enabled) return@pointerInput
+            detectTapGestures(
+                onPress = {
+                    step()
+                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    val job = scope.launch {
+                        delay(450)
+                        while (true) {
+                            step()
+                            delay(70)
+                        }
+                    }
+                    tryAwaitRelease()
+                    job.cancel()
+                }
+            )
+        },
+        contentAlignment = Alignment.Center,
+        content = content
+    )
 }
 
 /**

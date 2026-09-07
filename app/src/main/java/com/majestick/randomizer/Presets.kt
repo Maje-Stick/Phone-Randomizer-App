@@ -50,7 +50,7 @@ import org.json.JSONObject
 data class Preset(val name: String, val values: Map<String, String>)
 
 /**
- * Presets are scoped per tool: a preset saved in Shuffle never shows up in Pick.
+ * Presets are scoped per tool: a preset saved in List never shows up in Dice.
  * Backed by SharedPreferences and org.json, both part of the Android platform,
  * so this adds no dependencies to the build.
  */

@@ -147,7 +147,7 @@ fun NumberInput(
 ) {
     OutlinedTextField(
         value = value,
-        onValueChange = { new -> onValueChange(new.filter { it.isDigit() || it == '-' }) },
+        onValueChange = { new -> onValueChange(new.filter { it.isDigit() || it == '-' || it == '.' }) },
         label = { Text(label) },
         singleLine = true,
         modifier = modifier

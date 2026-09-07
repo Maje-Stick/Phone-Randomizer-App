@@ -10,9 +10,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -23,8 +20,8 @@ private val DATE_FORMAT: DateTimeFormatter = DateTimeFormatter.ISO_LOCAL_DATE
 
 @Composable
 fun CoinScreen(onBack: () -> Unit) {
-    var count by rememberSaveable { mutableStateOf(1) }
-    var flips by remember { mutableStateOf<List<String>?>(null) }
+    var count by draft("coin.count", 1)
+    var flips by draft<List<String>?>("coin.result", null)
 
     ToolScaffold("Coin flip", onBack, "Flip", { flips = flipCoins(count) }) {
         CoinResult(flips, "Flip once, or flip a hundred times and see the split.")
@@ -41,10 +38,10 @@ fun CoinScreen(onBack: () -> Unit) {
 
 @Composable
 fun DiceScreen(onBack: () -> Unit) {
-    var count by rememberSaveable { mutableStateOf(2) }
-    var sides by rememberSaveable { mutableStateOf(6) }
-    var rolls by remember { mutableStateOf<List<Int>?>(null) }
-    var notation by remember { mutableStateOf("") }
+    var count by draft("dice.count", 2)
+    var sides by draft("dice.sides", 6)
+    var rolls by draft<List<Int>?>("dice.result", null)
+    var notation by draft("dice.notation", "")
 
     ToolScaffold("Dice", onBack, "Roll ${count}d$sides", {
         rolls = rollDice(count, sides)
@@ -84,16 +81,16 @@ fun DiceScreen(onBack: () -> Unit) {
 
 @Composable
 fun NumberScreen(onBack: () -> Unit) {
-    var min by rememberSaveable { mutableStateOf("1") }
-    var max by rememberSaveable { mutableStateOf("100") }
-    var count by rememberSaveable { mutableStateOf(1) }
-    var unique by rememberSaveable { mutableStateOf(true) }
-    var numbers by remember { mutableStateOf<List<Int>?>(null) }
-    var caption by remember { mutableStateOf("") }
+    var min by draft("number.min", "1")
+    var max by draft("number.max", "100")
+    var count by draft("number.count", 1)
+    var unique by draft("number.unique", true)
+    var numbers by draft<List<Int>?>("number.result", null)
+    var caption by draft("number.caption", "")
 
     ToolScaffold("Number range", onBack, "Generate", {
-        val lo = min.toIntOrNull() ?: 1
-        val hi = max.toIntOrNull() ?: 100
+        val lo = min.toDoubleOrNull()?.toInt() ?: 1
+        val hi = max.toDoubleOrNull()?.toInt() ?: 100
         val drawn = randomNumbers(lo, hi, count, unique)
         numbers = drawn
         caption = if (drawn.size == 1) "between $lo and $hi"
@@ -129,79 +126,70 @@ fun NumberScreen(onBack: () -> Unit) {
     }
 }
 
+/**
+ * Absorbs what used to be three tools. A plain list is every weight at 1; a
+ * shuffle is a full-length draw with repeats off.
+ */
 @Composable
-fun PickScreen(onBack: () -> Unit) {
-    var raw by rememberSaveable { mutableStateOf("") }
-    var count by rememberSaveable { mutableStateOf(1) }
-    var unique by rememberSaveable { mutableStateOf(true) }
-    var picked by remember { mutableStateOf<List<String>?>(null) }
-    var caption by remember { mutableStateOf("") }
+fun ListScreen(onBack: () -> Unit) {
+    var entries by draft("list.entries", listOf(Entry(""), Entry("")))
+    var count by draft("list.count", 1)
+    var repeats by draft("list.repeats", false)
+    var result by draft<List<String>?>("list.result", null)
+    var caption by draft("list.caption", "")
 
-    ToolScaffold("Pick from a list", onBack, "Pick", {
-        val items = parseItems(raw)
-        if (items.isEmpty()) {
-            picked = null
+    ToolScaffold("List", onBack, "Draw", {
+        val usable = entries.filter { it.text.isNotBlank() }
+        if (usable.isEmpty()) {
+            result = null
             caption = ""
         } else {
-            picked = pickItems(items, count, unique)
-            caption = "from ${items.size} items"
+            result = weightedOrder(usable, count, repeats)
+            val weighted = usable.any { it.weight != 1.0 }
+            caption = "from ${usable.size} entries" + if (weighted) ", weighted" else ""
         }
     }) {
-        PickResult(picked, caption, "Add your options below, then pick.")
+        ListResult(result, caption, "Add entries below, then draw.")
         SectionSpacer()
         PresetBar(
-            toolId = "pick",
+            toolId = "list",
             capture = {
                 mapOf(
-                    "raw" to raw,
+                    "entries" to encodeEntries(entries),
                     "count" to count.toString(),
-                    "unique" to unique.toString()
+                    "repeats" to repeats.toString()
                 )
             },
             apply = {
-                raw = it.str("raw", raw)
+                entries = decodeEntries(it.str("entries", encodeEntries(entries)))
                 count = it.int("count", count)
-                unique = it.bool("unique", unique)
+                repeats = it.bool("repeats", repeats)
             }
         )
         SectionSpacer()
-        ItemsInput(raw, { raw = it })
-        Spacer(Modifier.height(8.dp))
-        Stepper("How many", count, { count = it }, min = 1, max = 100)
-        ToggleRow("No repeats", unique) { unique = it }
-    }
-}
-
-@Composable
-fun ShuffleScreen(onBack: () -> Unit) {
-    var raw by rememberSaveable { mutableStateOf("") }
-    var order by remember { mutableStateOf<List<String>?>(null) }
-
-    ToolScaffold("Shuffle order", onBack, "Shuffle", {
-        val items = parseItems(raw)
-        order = if (items.isEmpty()) null else Rng.shuffled(items)
-    }) {
-        ShuffleResult(order, "Put a list in, get it back in a new order.")
-        SectionSpacer()
-        PresetBar(
-            toolId = "shuffle",
-            capture = { mapOf("raw" to raw) },
-            apply = { raw = it.str("raw", raw) }
+        EntryListEditor(entries) { entries = it }
+        Spacer(Modifier.height(14.dp))
+        Stepper("How many to draw", count, { count = it }, min = 1, max = 200)
+        ToggleRow("Allow repeats", repeats) { repeats = it }
+        Spacer(Modifier.height(10.dp))
+        Text(
+            "Weight raises the odds of landing at the top. Draw as many as you have "
+                + "entries with repeats off to get a full weighted shuffle.",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        SectionSpacer()
-        ItemsInput(raw, { raw = it })
     }
 }
 
 @Composable
 fun TeamsScreen(onBack: () -> Unit) {
-    var raw by rememberSaveable { mutableStateOf("") }
-    var teams by rememberSaveable { mutableStateOf(2) }
-    var result by remember { mutableStateOf<List<List<String>>?>(null) }
+    var raw by draft("teams.raw", "")
+    var teams by draft("teams.count", 2)
+    var result by draft<List<List<String>>?>("teams.result", null)
 
     ToolScaffold("Split into teams", onBack, "Split", {
-        val items = parseItems(raw)
-        result = if (items.isEmpty()) null else splitIntoTeams(items, teams)
+        val names = parseEntriesFromText(raw).map { it.text }
+        result = if (names.isEmpty()) null else splitIntoTeams(names, teams)
     }) {
         TeamsResult(result, "Names go in, balanced teams come out.")
         SectionSpacer()
@@ -222,12 +210,12 @@ fun TeamsScreen(onBack: () -> Unit) {
 
 @Composable
 fun PasswordScreen(onBack: () -> Unit) {
-    var length by rememberSaveable { mutableStateOf(16) }
-    var upper by rememberSaveable { mutableStateOf(true) }
-    var lower by rememberSaveable { mutableStateOf(true) }
-    var digits by rememberSaveable { mutableStateOf(true) }
-    var symbols by rememberSaveable { mutableStateOf(true) }
-    var password by remember { mutableStateOf<String?>(null) }
+    var length by draft("pw.length", 16)
+    var upper by draft("pw.upper", true)
+    var lower by draft("pw.lower", true)
+    var digits by draft("pw.digits", true)
+    var symbols by draft("pw.symbols", true)
+    var password by draft<String?>("pw.result", null)
 
     ToolScaffold("Password", onBack, "Generate", {
         password = generatePassword(length, upper, lower, digits, symbols).ifEmpty { null }
@@ -270,8 +258,8 @@ fun PasswordScreen(onBack: () -> Unit) {
 
 @Composable
 fun CardsScreen(onBack: () -> Unit) {
-    var count by rememberSaveable { mutableStateOf(1) }
-    var cards by remember { mutableStateOf<List<String>?>(null) }
+    var count by draft("cards.count", 1)
+    var cards by draft<List<String>?>("cards.result", null)
 
     ToolScaffold("Draw cards", onBack, "Draw", { cards = drawCards(count) }) {
         CardsResult(cards, "Draw from a freshly shuffled deck.")
@@ -288,7 +276,7 @@ fun CardsScreen(onBack: () -> Unit) {
 
 @Composable
 fun ColorScreen(onBack: () -> Unit) {
-    var rgb by rememberSaveable { mutableStateOf<Int?>(null) }
+    var rgb by draft<Int?>("color.result", null)
 
     ToolScaffold("Random color", onBack, "Generate", { rgb = randomColor() }) {
         ColorResult(rgb, "Generate a color and its hex code lands here.")
@@ -302,45 +290,13 @@ fun ColorScreen(onBack: () -> Unit) {
 }
 
 @Composable
-fun WeightedScreen(onBack: () -> Unit) {
-    var raw by rememberSaveable { mutableStateOf("") }
-    var winner by remember { mutableStateOf<String?>(null) }
-    var share by remember { mutableStateOf<Double?>(null) }
-
-    ToolScaffold("Weighted pick", onBack, "Pick", {
-        val entries = parseWeighted(raw)
-        val picked = weightedPick(entries)
-        winner = picked
-        share = picked?.let { name ->
-            val total = entries.sumOf { it.second }
-            entries.first { it.first == name }.second / total
-        }
-    }) {
-        WeightedResult(winner, share, "Give each option a weight. Bigger weight, better odds.")
-        SectionSpacer()
-        PresetBar(
-            toolId = "weighted",
-            capture = { mapOf("raw" to raw) },
-            apply = { raw = it.str("raw", raw) }
-        )
-        SectionSpacer()
-        ItemsInput(
-            raw,
-            { raw = it },
-            label = "Options with weights",
-            hint = "One per line, like:\nCommon : 70\nRare : 25\nLegendary : 5\nNo weight means 1."
-        )
-    }
-}
-
-@Composable
 fun DateScreen(onBack: () -> Unit) {
     val today = LocalDate.now()
-    var start by rememberSaveable { mutableStateOf(today.toString()) }
-    var end by rememberSaveable { mutableStateOf(today.plusYears(1).toString()) }
-    var withTime by rememberSaveable { mutableStateOf(false) }
-    var drawn by remember { mutableStateOf<LocalDate?>(null) }
-    var drawnTime by remember { mutableStateOf<String?>(null) }
+    var start by draft("date.start", today.toString())
+    var end by draft("date.end", today.plusYears(1).toString())
+    var withTime by draft("date.withTime", false)
+    var drawn by draft<LocalDate?>("date.result", null)
+    var drawnTime by draft<String?>("date.resultTime", null)
 
     ToolScaffold("Random date", onBack, "Generate", {
         val a = runCatching { LocalDate.parse(start, DATE_FORMAT) }.getOrNull()
@@ -375,22 +331,78 @@ fun DateScreen(onBack: () -> Unit) {
     }
 }
 
+/**
+ * The only tool whose outcomes are not uniformly likely. A list can imitate any
+ * selection; it cannot produce a bell curve.
+ */
 @Composable
-fun LetterScreen(onBack: () -> Unit) {
-    var count by rememberSaveable { mutableStateOf(1) }
-    var letters by remember { mutableStateOf<List<Char>?>(null) }
+fun DistributionScreen(onBack: () -> Unit) {
+    var kind by draft("dist.kind", Distribution.NORMAL)
+    var first by draft("dist.first", "100")
+    var second by draft("dist.second", "15")
+    var count by draft("dist.count", 200)
+    var values by draft<List<Double>?>("dist.result", null)
+    var bars by draft<Histogram?>("dist.hist", null)
+    var caption by draft("dist.caption", "")
 
-    ToolScaffold("Random letters", onBack, "Generate", {
-        letters = randomLetters(count).filter { it.isLetter() }.toList()
+    ToolScaffold("Distribution", onBack, "Sample", {
+        val a = first.toDoubleOrNull() ?: 0.0
+        val b = second.toDoubleOrNull() ?: 1.0
+        val drawn = sampleDistribution(kind, a, b, count)
+        values = drawn
+        bars = histogram(drawn)
+        caption = "mean of $count ${kind.label.lowercase()} samples"
     }) {
-        LettersResult(letters, "Handy for word games and quick labels.")
-        SectionSpacer()
-        PresetBar(
-            toolId = "letter",
-            capture = { mapOf("count" to count.toString()) },
-            apply = { count = it.int("count", count) }
+        DistributionResult(
+            values,
+            bars,
+            caption,
+            "Pick a shape and sample it. The histogram shows where values actually landed."
         )
         SectionSpacer()
-        Stepper("Letters", count, { count = it }, min = 1, max = 100)
+        PresetBar(
+            toolId = "distribution",
+            capture = {
+                mapOf(
+                    "kind" to kind.name,
+                    "first" to first,
+                    "second" to second,
+                    "count" to count.toString()
+                )
+            },
+            apply = { stored ->
+                kind = runCatching { Distribution.valueOf(stored.str("kind", kind.name)) }
+                    .getOrDefault(kind)
+                first = stored.str("first", first)
+                second = stored.str("second", second)
+                count = stored.int("count", count)
+            }
+        )
+        SectionSpacer()
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Distribution.values().forEach { option ->
+                FilterChip(
+                    selected = kind == option,
+                    onClick = { kind = option },
+                    label = { Text(option.label) }
+                )
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            NumberInput(kind.firstLabel, first, { first = it }, Modifier.weight(1f))
+            if (kind.secondLabel != null) {
+                NumberInput(kind.secondLabel!!, second, { second = it }, Modifier.weight(1f))
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        Stepper("Samples", count, { count = it }, min = 10, max = 5000, step = 10)
+        Spacer(Modifier.height(10.dp))
+        Text(
+            "Normal clusters around the mean and thins out at the edges. Exponential "
+                + "favours small values with a long tail. Uniform treats every value alike.",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }

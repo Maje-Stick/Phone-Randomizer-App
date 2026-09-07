@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -284,93 +285,6 @@ fun NumbersResult(numbers: List<Int>?, caption: String, hint: String) {
     }
 }
 
-/* ---------------------------------------------------------------- pick --- */
-
-@Composable
-fun PickResult(picked: List<String>?, caption: String, hint: String) {
-    ResultFrame(copyText = picked?.joinToString("\n")) {
-        if (picked.isNullOrEmpty()) {
-            EmptyHint(hint)
-        } else {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                picked.take(12).forEach { item ->
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(
-                                MaterialTheme.colorScheme.surface,
-                                RoundedCornerShape(14.dp)
-                            )
-                            .border(
-                                1.dp,
-                                MaterialTheme.colorScheme.primary,
-                                RoundedCornerShape(14.dp)
-                            )
-                            .padding(horizontal = 16.dp, vertical = 14.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            item,
-                            style = if (picked.size == 1)
-                                MaterialTheme.typography.headlineSmall
-                            else MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            textAlign = TextAlign.Center
-                        )
-                    }
-                }
-                if (picked.size > 12) Caption("+${picked.size - 12} more")
-                Caption(caption)
-            }
-        }
-    }
-}
-
-/* ------------------------------------------------------------- shuffle --- */
-
-@Composable
-fun ShuffleResult(items: List<String>?, hint: String) {
-    ResultFrame(
-        copyText = items?.mapIndexed { i, s -> "${i + 1}. $s" }?.joinToString("\n")
-    ) {
-        if (items.isNullOrEmpty()) {
-            EmptyHint(hint)
-        } else {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items.forEachIndexed { index, item ->
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(28.dp)
-                                .background(MaterialTheme.colorScheme.primary, CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                "${index + 1}",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onPrimary
-                            )
-                        }
-                        Spacer(Modifier.width(12.dp))
-                        Text(
-                            item,
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
 /* --------------------------------------------------------------- teams --- */
 
 @Composable
@@ -416,53 +330,6 @@ fun TeamsResult(teams: List<List<String>>?, hint: String) {
                             )
                         }
                     }
-                }
-            }
-        }
-    }
-}
-
-/* ------------------------------------------------------------ weighted --- */
-
-@Composable
-fun WeightedResult(winner: String?, share: Double?, hint: String) {
-    ResultFrame(copyText = winner) {
-        if (winner == null) {
-            EmptyHint(hint)
-        } else {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    winner,
-                    style = MaterialTheme.typography.displayMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    textAlign = TextAlign.Center
-                )
-                if (share != null) {
-                    Spacer(Modifier.height(18.dp))
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(10.dp)
-                            .background(
-                                MaterialTheme.colorScheme.surface,
-                                RoundedCornerShape(5.dp)
-                            )
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth(share.toFloat().coerceIn(0.02f, 1f))
-                                .height(10.dp)
-                                .background(
-                                    MaterialTheme.colorScheme.primary,
-                                    RoundedCornerShape(5.dp)
-                                )
-                        )
-                    }
-                    Spacer(Modifier.height(10.dp))
-                    Caption("%.1f%% chance of landing here".format(share * 100))
                 }
             }
         }
@@ -580,25 +447,6 @@ fun DateResult(date: LocalDate?, time: String?, hint: String) {
     }
 }
 
-/* ------------------------------------------------------------- letters --- */
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-fun LettersResult(letters: List<Char>?, hint: String) {
-    ResultFrame(copyText = letters?.joinToString(" ")) {
-        if (letters.isNullOrEmpty()) {
-            EmptyHint(hint)
-        } else {
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                letters.forEach { Tile(it.toString(), accent = true) }
-            }
-        }
-    }
-}
-
 /* --------------------------------------------------------------- color --- */
 
 @Composable
@@ -624,6 +472,109 @@ fun ColorResult(rgb: Int?, hint: String) {
                 )
                 Spacer(Modifier.height(6.dp))
                 Caption("R ${(rgb shr 16) and 0xFF}   G ${(rgb shr 8) and 0xFF}   B ${rgb and 0xFF}")
+            }
+        }
+    }
+}
+
+/* ---------------------------------------------------------------- list --- */
+
+/**
+ * Compact ordered output. Position carries the meaning here, so the numbers get
+ * the accent colour and everything else stays out of the way.
+ */
+@Composable
+fun ListResult(items: List<String>?, caption: String, hint: String) {
+    ResultFrame(
+        copyText = items?.mapIndexed { i, s -> "${i + 1}. $s" }?.joinToString("\n")
+    ) {
+        if (items.isNullOrEmpty()) {
+            EmptyHint(hint)
+        } else {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
+                items.forEachIndexed { index, item ->
+                    Row(verticalAlignment = Alignment.Top) {
+                        Text(
+                            "${index + 1}",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                            textAlign = TextAlign.End,
+                            modifier = Modifier.width(22.dp)
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Text(
+                            item,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+                if (caption.isNotBlank()) {
+                    Spacer(Modifier.height(10.dp))
+                    Caption(caption)
+                }
+            }
+        }
+    }
+}
+
+/* -------------------------------------------------------- distribution --- */
+
+@Composable
+fun DistributionResult(
+    values: List<Double>?,
+    bars: Histogram?,
+    caption: String,
+    hint: String
+) {
+    ResultFrame(copyText = values?.joinToString("\n") { trimNumber(it) }) {
+        if (values.isNullOrEmpty() || bars == null || bars.counts.isEmpty()) {
+            EmptyHint(hint)
+        } else {
+            val peak = (bars.counts.maxOrNull() ?: 1).coerceAtLeast(1)
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(120.dp),
+                    verticalAlignment = Alignment.Bottom,
+                    horizontalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
+                    bars.counts.forEach { count ->
+                        val fraction = (count.toFloat() / peak).coerceAtLeast(0.02f)
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight(fraction)
+                                .background(
+                                    MaterialTheme.colorScheme.primary,
+                                    RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp)
+                                )
+                        )
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Caption(trimNumber(bars.low))
+                    Caption(trimNumber(bars.high))
+                }
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    trimNumber(values.average()),
+                    style = MaterialTheme.typography.displayMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Caption(caption)
             }
         }
     }

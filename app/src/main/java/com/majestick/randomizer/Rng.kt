@@ -1,6 +1,10 @@
 package com.majestick.randomizer
 
 import java.security.SecureRandom
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.ln
+import kotlin.math.sqrt
 
 /**
  * The single source of randomness for the entire app.
@@ -55,6 +59,17 @@ object Rng {
 
     /** Uniform in [0.0, 1.0). */
     fun double(): Double = secure.nextDouble()
+
+    /**
+     * Standard normal (mean 0, standard deviation 1) via Box-Muller.
+     * Built on [double] so it inherits the same entropy source.
+     */
+    fun gaussian(): Double {
+        var u1 = double()
+        while (u1 <= 0.0) u1 = double()
+        val u2 = double()
+        return sqrt(-2.0 * ln(u1)) * cos(2.0 * PI * u2)
+    }
 
     /** Fisher-Yates, driven by the same entropy source. */
     fun <T> shuffled(items: List<T>): List<T> {

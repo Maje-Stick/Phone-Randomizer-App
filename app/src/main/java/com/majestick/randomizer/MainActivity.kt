@@ -29,7 +29,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Balance
+import androidx.compose.material.icons.automirrored.filled.FormatListNumbered
 import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Event
@@ -39,10 +39,8 @@ import androidx.compose.material.icons.filled.Paid
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Password
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Shuffle
-import androidx.compose.material.icons.filled.SortByAlpha
+import androidx.compose.material.icons.filled.ShowChart
 import androidx.compose.material.icons.filled.Style
-import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -99,15 +97,13 @@ private val TOOLS = listOf(
     Tool("coin", "Coin flip", Icons.Filled.Paid),
     Tool("dice", "Dice", Icons.Filled.Casino),
     Tool("number", "Number range", Icons.Filled.Numbers),
-    Tool("pick", "Pick from a list", Icons.Filled.TouchApp),
-    Tool("shuffle", "Shuffle order", Icons.Filled.Shuffle),
+    Tool("list", "List", Icons.AutoMirrored.Filled.FormatListNumbered),
     Tool("teams", "Split into teams", Icons.Filled.Groups),
-    Tool("weighted", "Weighted pick", Icons.Filled.Balance),
     Tool("password", "Password", Icons.Filled.Password),
     Tool("cards", "Draw cards", Icons.Filled.Style),
     Tool("color", "Random color", Icons.Filled.Palette),
     Tool("date", "Random date", Icons.Filled.Event),
-    Tool("letter", "Random letters", Icons.Filled.SortByAlpha)
+    Tool("distribution", "Distribution", Icons.Filled.ShowChart)
 )
 
 @Composable
@@ -126,15 +122,13 @@ fun App(themeId: String, onThemeChange: (String) -> Unit) {
         "coin" -> CoinScreen(back)
         "dice" -> DiceScreen(back)
         "number" -> NumberScreen(back)
-        "pick" -> PickScreen(back)
-        "shuffle" -> ShuffleScreen(back)
+        "list" -> ListScreen(back)
         "teams" -> TeamsScreen(back)
-        "weighted" -> WeightedScreen(back)
         "password" -> PasswordScreen(back)
         "cards" -> CardsScreen(back)
         "color" -> ColorScreen(back)
         "date" -> DateScreen(back)
-        "letter" -> LetterScreen(back)
+        "distribution" -> DistributionScreen(back)
         else -> HomeScreen(
             onOpen = { openTool = it },
             onSettings = { openTool = "settings" }

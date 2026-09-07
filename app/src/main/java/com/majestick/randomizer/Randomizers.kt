@@ -1,17 +1,79 @@
 package com.majestick.randomizer
 
 import java.time.LocalDate
+import kotlin.math.ln
+import kotlin.math.max
 
 /**
  * All randomization logic as pure functions. Every draw goes through [Rng],
  * so the entropy source is swappable in exactly one place.
  */
 
-/** Splits pasted text on newlines, commas and semicolons. */
-fun parseItems(raw: String): List<String> =
+/* ----------------------------------------------------------------- list --- */
+
+/** One row of the list tool: some text, and how heavily it is favoured. */
+data class Entry(val text: String, val weight: Double = 1.0)
+
+private const val FIELD_SEP = "\u0001"
+
+fun encodeEntries(entries: List<Entry>): String =
+    entries.joinToString("\n") { "${it.weight}$FIELD_SEP${it.text}" }
+
+fun decodeEntries(raw: String): List<Entry> =
+    raw.split("\n").mapNotNull { line ->
+        if (line.isBlank()) return@mapNotNull null
+        val cut = line.indexOf(FIELD_SEP)
+        if (cut < 0) Entry(line.trim())
+        else Entry(
+            text = line.substring(cut + 1),
+            weight = line.substring(0, cut).toDoubleOrNull()?.coerceAtLeast(0.0) ?: 1.0
+        )
+    }
+
+/** Bulk entry: one item per line, all weighted equally. */
+fun parseEntriesFromText(raw: String): List<Entry> =
     raw.split('\n', ',', ';')
         .map { it.trim() }
         .filter { it.isNotEmpty() }
+        .map { Entry(it) }
+
+private fun weightedIndex(pool: List<Entry>): Int {
+    val total = pool.sumOf { it.weight }
+    if (total <= 0.0) return Rng.int(pool.size)
+    var roll = Rng.double() * total
+    pool.forEachIndexed { index, entry ->
+        roll -= entry.weight
+        if (roll <= 0.0) return index
+    }
+    return pool.lastIndex
+}
+
+/**
+ * Produces an ordered result. Weight raises an entry's chance of taking the top
+ * slot; once taken, the same draw repeats for the next slot from what is left.
+ *
+ * With repeats allowed each slot is drawn independently, so weights apply
+ * unchanged at every position. Without repeats a full-length draw is always a
+ * permutation of the input.
+ */
+fun weightedOrder(entries: List<Entry>, count: Int, allowRepeats: Boolean): List<String> {
+    val usable = entries.filter { it.text.isNotBlank() }
+    if (usable.isEmpty()) return emptyList()
+    val n = count.coerceIn(1, 500)
+
+    if (allowRepeats) return List(n) { usable[weightedIndex(usable)].text }
+
+    val pool = usable.toMutableList()
+    val out = ArrayList<String>(minOf(n, pool.size))
+    repeat(minOf(n, pool.size)) {
+        val index = weightedIndex(pool)
+        out.add(pool[index].text)
+        pool.removeAt(index)
+    }
+    return out
+}
+
+/* ------------------------------------------------------------- the rest --- */
 
 fun flipCoins(count: Int): List<String> =
     List(count.coerceIn(1, 200)) { if (Rng.bool()) "Heads" else "Tails" }
@@ -34,13 +96,6 @@ fun randomNumbers(min: Int, max: Int, count: Int, unique: Boolean): List<Int> {
     val picked = LinkedHashSet<Int>()
     while (picked.size < n) picked.add(Rng.intInRange(lo, hi))
     return picked.toList()
-}
-
-fun pickItems(items: List<String>, count: Int, unique: Boolean): List<String> {
-    if (items.isEmpty()) return emptyList()
-    val n = count.coerceIn(1, 500)
-    return if (unique) Rng.shuffled(items).take(n)
-    else List(n) { Rng.pick(items) }
 }
 
 fun splitIntoTeams(items: List<String>, teams: Int): List<List<String>> {
@@ -94,33 +149,6 @@ fun randomColor(): Int = Rng.int(0x1000000)
 
 fun toHex(rgb: Int): String = "#%06X".format(rgb)
 
-/**
- * Accepts one entry per line, optionally `item : weight`.
- * A missing or invalid weight defaults to 1.
- */
-fun parseWeighted(raw: String): List<Pair<String, Double>> =
-    raw.split('\n')
-        .map { it.trim() }
-        .filter { it.isNotEmpty() }
-        .map { line ->
-            val cut = line.lastIndexOf(':')
-            val weight = if (cut > 0) line.substring(cut + 1).trim().toDoubleOrNull() else null
-            if (weight != null && weight > 0.0) line.substring(0, cut).trim() to weight
-            else line to 1.0
-        }
-        .filter { it.first.isNotEmpty() }
-
-fun weightedPick(entries: List<Pair<String, Double>>): String? {
-    if (entries.isEmpty()) return null
-    val total = entries.sumOf { it.second }
-    var roll = Rng.double() * total
-    for ((item, weight) in entries) {
-        roll -= weight
-        if (roll <= 0.0) return item
-    }
-    return entries.last().first
-}
-
 fun randomDate(start: LocalDate, end: LocalDate): LocalDate =
     LocalDate.ofEpochDay(Rng.longInRange(start.toEpochDay(), end.toEpochDay()))
 
@@ -129,7 +157,59 @@ fun randomTimeOfDay(): String {
     return "%02d:%02d".format(minutes / 60, minutes % 60)
 }
 
-fun randomLetters(count: Int): String {
-    val letters = ('A'..'Z').joinToString("")
-    return (1..count.coerceIn(1, 100)).joinToString(" ") { Rng.pickChar(letters).toString() }
+/* --------------------------------------------------------- distribution --- */
+
+/**
+ * The one tool that produces values which are not uniformly likely. A list can
+ * fake any selection, but it cannot produce a bell curve.
+ */
+enum class Distribution(val label: String, val firstLabel: String, val secondLabel: String?) {
+    UNIFORM("Uniform", "Lowest", "Highest"),
+    NORMAL("Normal", "Mean", "Std deviation"),
+    EXPONENTIAL("Exponential", "Mean", null)
+}
+
+fun sampleDistribution(
+    kind: Distribution,
+    first: Double,
+    second: Double,
+    count: Int
+): List<Double> {
+    val n = count.coerceIn(1, 5000)
+    return when (kind) {
+        Distribution.UNIFORM -> {
+            val lo = minOf(first, second)
+            val hi = maxOf(first, second)
+            List(n) { lo + Rng.double() * (hi - lo) }
+        }
+        Distribution.NORMAL -> {
+            val sd = max(second, 0.0)
+            List(n) { first + Rng.gaussian() * sd }
+        }
+        Distribution.EXPONENTIAL -> {
+            val mean = max(first, 1e-9)
+            List(n) {
+                var u = Rng.double()
+                while (u <= 0.0) u = Rng.double()
+                -mean * ln(u)
+            }
+        }
+    }
+}
+
+/** Bucket counts for the histogram, plus the range they span. */
+data class Histogram(val counts: List<Int>, val low: Double, val high: Double)
+
+fun histogram(values: List<Double>, bins: Int = 14): Histogram {
+    if (values.isEmpty()) return Histogram(emptyList(), 0.0, 0.0)
+    val low = values.min()
+    val high = values.max()
+    if (high - low < 1e-12) return Histogram(List(bins) { if (it == bins / 2) values.size else 0 }, low, high)
+
+    val counts = IntArray(bins)
+    values.forEach { v ->
+        val slot = (((v - low) / (high - low)) * bins).toInt().coerceIn(0, bins - 1)
+        counts[slot]++
+    }
+    return Histogram(counts.toList(), low, high)
 }

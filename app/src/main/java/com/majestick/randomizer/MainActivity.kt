@@ -25,7 +25,6 @@ import androidx.compose.material.icons.filled.Balance
 import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.Groups
-import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.Numbers
 import androidx.compose.material.icons.filled.Paid
 import androidx.compose.material.icons.filled.Palette
@@ -81,7 +80,6 @@ private val TOOLS = listOf(
     Tool("weighted", "Weighted pick", Icons.Filled.Balance),
     Tool("password", "Password", Icons.Filled.Password),
     Tool("cards", "Draw cards", Icons.Filled.Style),
-    Tool("decide", "Yes or no", Icons.Filled.HelpOutline),
     Tool("color", "Random color", Icons.Filled.Palette),
     Tool("date", "Random date", Icons.Filled.Event),
     Tool("letter", "Random letters", Icons.Filled.SortByAlpha)
@@ -105,7 +103,6 @@ fun App() {
         "weighted" -> WeightedScreen(back)
         "password" -> PasswordScreen(back)
         "cards" -> CardsScreen(back)
-        "decide" -> DecideScreen(back)
         "color" -> ColorScreen(back)
         "date" -> DateScreen(back)
         "letter" -> LetterScreen(back)

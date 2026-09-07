@@ -1,15 +1,11 @@
 package com.majestick.randomizer
 
-import java.security.SecureRandom
 import java.time.LocalDate
-import kotlin.random.Random
 
 /**
- * All randomization logic lives here as pure functions so it can be tested
- * and reused without touching Compose.
+ * All randomization logic as pure functions. Every draw goes through [Rng],
+ * so the entropy source is swappable in exactly one place.
  */
-
-private val secureRandom = SecureRandom()
 
 /** Splits pasted text on newlines, commas and semicolons. */
 fun parseItems(raw: String): List<String> =
@@ -18,12 +14,12 @@ fun parseItems(raw: String): List<String> =
         .filter { it.isNotEmpty() }
 
 fun flipCoins(count: Int): List<String> =
-    List(count.coerceIn(1, 200)) { if (Random.nextBoolean()) "Heads" else "Tails" }
+    List(count.coerceIn(1, 200)) { if (Rng.bool()) "Heads" else "Tails" }
 
 fun rollDice(count: Int, sides: Int): List<Int> {
     val c = count.coerceIn(1, 100)
     val s = sides.coerceIn(2, 1000)
-    return List(c) { Random.nextInt(1, s + 1) }
+    return List(c) { Rng.int(s) + 1 }
 }
 
 fun randomNumbers(min: Int, max: Int, count: Int, unique: Boolean): List<Int> {
@@ -32,27 +28,25 @@ fun randomNumbers(min: Int, max: Int, count: Int, unique: Boolean): List<Int> {
     val n = count.coerceIn(1, 500)
     val span = hi.toLong() - lo.toLong() + 1L
 
-    if (!unique) return List(n) { Random.nextLong(lo.toLong(), hi.toLong() + 1L).toInt() }
-    if (n >= span) return (lo..hi).toList().shuffled()
+    if (!unique) return List(n) { Rng.intInRange(lo, hi) }
+    if (n >= span) return Rng.shuffled((lo..hi).toList())
 
     val picked = LinkedHashSet<Int>()
-    while (picked.size < n) {
-        picked.add(Random.nextLong(lo.toLong(), hi.toLong() + 1L).toInt())
-    }
+    while (picked.size < n) picked.add(Rng.intInRange(lo, hi))
     return picked.toList()
 }
 
 fun pickItems(items: List<String>, count: Int, unique: Boolean): List<String> {
     if (items.isEmpty()) return emptyList()
     val n = count.coerceIn(1, 500)
-    return if (unique) items.shuffled().take(n)
-    else List(n) { items[Random.nextInt(items.size)] }
+    return if (unique) Rng.shuffled(items).take(n)
+    else List(n) { Rng.pick(items) }
 }
 
 fun splitIntoTeams(items: List<String>, teams: Int): List<List<String>> {
     val t = teams.coerceIn(1, 50)
     val buckets = List(t) { mutableListOf<String>() }
-    items.shuffled().forEachIndexed { i, item -> buckets[i % t].add(item) }
+    Rng.shuffled(items).forEachIndexed { i, item -> buckets[i % t].add(item) }
     return buckets
 }
 
@@ -62,8 +56,8 @@ private const val DIGITS = "23456789"
 private const val SYMBOLS = "!@#\$%^&*_-+=?"
 
 /**
- * Uses SecureRandom, and skips characters that are easy to misread (I, l, 1, O, 0).
- * Guarantees at least one character from every enabled set.
+ * Skips characters that are easy to misread (I, l, 1, O, 0) and guarantees at
+ * least one character from every enabled set.
  */
 fun generatePassword(
     length: Int,
@@ -82,18 +76,10 @@ fun generatePassword(
 
     val len = length.coerceIn(4, 128)
     val everything = pools.joinToString("")
-    val chars = MutableList(len) { everything[secureRandom.nextInt(everything.length)] }
+    val chars = MutableList(len) { Rng.pickChar(everything) }
 
-    pools.forEachIndexed { i, pool ->
-        if (i < len) chars[i] = pool[secureRandom.nextInt(pool.length)]
-    }
-    for (i in chars.indices.reversed()) {
-        val j = secureRandom.nextInt(i + 1)
-        val tmp = chars[i]
-        chars[i] = chars[j]
-        chars[j] = tmp
-    }
-    return chars.joinToString("")
+    pools.forEachIndexed { i, pool -> if (i < len) chars[i] = Rng.pickChar(pool) }
+    return Rng.shuffled(chars).joinToString("")
 }
 
 private val SUITS = listOf("\u2660", "\u2665", "\u2666", "\u2663")
@@ -101,12 +87,10 @@ private val RANKS = listOf("A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J
 
 fun fullDeck(): List<String> = SUITS.flatMap { suit -> RANKS.map { rank -> "$rank$suit" } }
 
-fun drawCards(count: Int): List<String> = fullDeck().shuffled().take(count.coerceIn(1, 52))
-
-fun decide(): String = listOf("Yes", "No", "Maybe", "Ask again later").random()
+fun drawCards(count: Int): List<String> = Rng.shuffled(fullDeck()).take(count.coerceIn(1, 52))
 
 /** Returns a packed 0xRRGGBB value. */
-fun randomColor(): Int = Random.nextInt(0x000000, 0x1000000)
+fun randomColor(): Int = Rng.int(0x1000000)
 
 fun toHex(rgb: Int): String = "#%06X".format(rgb)
 
@@ -129,7 +113,7 @@ fun parseWeighted(raw: String): List<Pair<String, Double>> =
 fun weightedPick(entries: List<Pair<String, Double>>): String? {
     if (entries.isEmpty()) return null
     val total = entries.sumOf { it.second }
-    var roll = Random.nextDouble() * total
+    var roll = Rng.double() * total
     for ((item, weight) in entries) {
         roll -= weight
         if (roll <= 0.0) return item
@@ -137,13 +121,15 @@ fun weightedPick(entries: List<Pair<String, Double>>): String? {
     return entries.last().first
 }
 
-fun randomDate(start: LocalDate, end: LocalDate): LocalDate {
-    val a = minOf(start, end).toEpochDay()
-    val b = maxOf(start, end).toEpochDay()
-    return LocalDate.ofEpochDay(if (a == b) a else Random.nextLong(a, b + 1))
-}
+fun randomDate(start: LocalDate, end: LocalDate): LocalDate =
+    LocalDate.ofEpochDay(Rng.longInRange(start.toEpochDay(), end.toEpochDay()))
 
 fun randomTimeOfDay(): String {
-    val minutes = Random.nextInt(0, 24 * 60)
+    val minutes = Rng.int(24 * 60)
     return "%02d:%02d".format(minutes / 60, minutes % 60)
+}
+
+fun randomLetters(count: Int): String {
+    val letters = ('A'..'Z').joinToString("")
+    return (1..count.coerceIn(1, 100)).joinToString(" ") { Rng.pickChar(letters).toString() }
 }

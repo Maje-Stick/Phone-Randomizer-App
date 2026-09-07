@@ -156,7 +156,7 @@ fun ShuffleScreen(onBack: () -> Unit) {
     ToolScaffold("Shuffle order", onBack, "Shuffle", {
         val items = parseItems(raw)
         headline = if (items.isEmpty()) null
-        else items.shuffled().mapIndexed { i, s -> "${i + 1}. $s" }.joinToString("\n")
+        else Rng.shuffled(items).mapIndexed { i, s -> "${i + 1}. $s" }.joinToString("\n")
     }) {
         ResultBoard(headline, null, "Put a list in, get it back in a new order.")
         SectionSpacer()
@@ -240,15 +240,6 @@ fun CardsScreen(onBack: () -> Unit) {
         ResultBoard(headline, detail, "Draw from a freshly shuffled deck.")
         SectionSpacer()
         Stepper("Cards", count, { count = it }, min = 1, max = 52)
-    }
-}
-
-@Composable
-fun DecideScreen(onBack: () -> Unit) {
-    var headline by rememberSaveable { mutableStateOf<String?>(null) }
-
-    ToolScaffold("Yes or no", onBack, "Decide", { headline = decide() }) {
-        ResultBoard(headline, null, "Ask your question out loud, then tap Decide.")
     }
 }
 
@@ -357,10 +348,7 @@ fun LetterScreen(onBack: () -> Unit) {
     var headline by rememberSaveable { mutableStateOf<String?>(null) }
 
     ToolScaffold("Random letters", onBack, "Generate", {
-        val letters = ('A'..'Z').toList()
-        headline = (1..count.coerceIn(1, 100))
-            .map { letters.random() }
-            .joinToString(" ")
+        headline = randomLetters(count)
     }) {
         ResultBoard(headline, null, "Handy for word games and quick labels.")
         SectionSpacer()

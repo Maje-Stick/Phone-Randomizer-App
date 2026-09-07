@@ -29,7 +29,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.FormatListNumbered
+import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Event
@@ -97,7 +97,7 @@ private val TOOLS = listOf(
     Tool("coin", "Coin flip", Icons.Filled.Paid),
     Tool("dice", "Dice", Icons.Filled.Casino),
     Tool("number", "Number range", Icons.Filled.Numbers),
-    Tool("list", "List", Icons.AutoMirrored.Filled.FormatListNumbered),
+    Tool("list", "List", Icons.Filled.Layers),
     Tool("teams", "Split into teams", Icons.Filled.Groups),
     Tool("password", "Password", Icons.Filled.Password),
     Tool("cards", "Draw cards", Icons.Filled.Style),

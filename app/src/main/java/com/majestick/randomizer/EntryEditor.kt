@@ -2,8 +2,6 @@ package com.majestick.randomizer
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -44,7 +42,6 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -136,7 +133,7 @@ fun EntryListEditor(
             )
             Spacer(Modifier.width(8.dp))
             Text(
-                "Entry  \u00b7  tap a weight to type, drag it sideways to nudge",
+                "Entry  \u00b7  tap a weight to type, hold it to scrub",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -254,9 +251,8 @@ fun trimNumber(value: Double): String =
     else "%.2f".format(value).trimEnd('0').trimEnd('.')
 
 /**
- * Tap to type an exact weight, drag left or right to nudge it a step at a time.
- * Horizontal because the screen scrolls vertically -- an up/down drag here would
- * fight the page.
+ * Same interaction as the steppers: tap to type, hold to scrub.
+ * Gestures live in [ScrubbableText] so there is one implementation to get right.
  */
 @Composable
 private fun WeightBox(
@@ -272,8 +268,7 @@ private fun WeightBox(
     val callback by rememberUpdatedState(onWeightChange)
 
     fun commit() {
-        val parsed = buffer.toDoubleOrNull()
-        if (parsed != null) callback(parsed.coerceIn(0.0, 9999.0))
+        buffer.toDoubleOrNull()?.let { callback(it.coerceIn(0.0, 9999.0)) }
         editing = false
     }
 
@@ -309,39 +304,17 @@ private fun WeightBox(
             )
             LaunchedEffect(Unit) { focusRequester.requestFocus() }
         } else {
-            Text(
-                trimNumber(weight),
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
-                textAlign = TextAlign.Center,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .pointerInput(Unit) {
-                        detectTapGestures(onTap = {
-                            buffer = trimNumber(current)
-                            editing = true
-                        })
-                    }
-                    .pointerInput(Unit) {
-                        var accumulated = 0f
-                        val threshold = 14f * density
-                        detectHorizontalDragGestures(
-                            onDragEnd = { accumulated = 0f },
-                            onDragCancel = { accumulated = 0f }
-                        ) { change, delta ->
-                            change.consume()
-                            accumulated += delta
-                            while (accumulated >= threshold) {
-                                accumulated -= threshold
-                                callback((current + 1.0).coerceAtMost(9999.0))
-                            }
-                            while (accumulated <= -threshold) {
-                                accumulated += threshold
-                                callback((current - 1.0).coerceAtLeast(0.0))
-                            }
-                        }
-                    }
+            ScrubbableText(
+                text = trimNumber(weight),
+                onTapToEdit = {
+                    buffer = trimNumber(current)
+                    editing = true
+                },
+                onNudge = { step ->
+                    callback((current + step).coerceIn(0.0, 9999.0))
+                },
+                modifier = Modifier.fillMaxWidth(),
+                style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Bold)
             )
         }
     }

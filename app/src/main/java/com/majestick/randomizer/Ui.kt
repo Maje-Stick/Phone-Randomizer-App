@@ -2,8 +2,7 @@ package com.majestick.randomizer
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -65,8 +64,10 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlin.math.abs
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -187,10 +188,102 @@ private fun RepeatIconButton(
 }
 
 /**
- * Shows a number. Tap it to type one; drag sideways to nudge it.
+ * A number you can scrub. Tap it to type an exact value; press and hold for
+ * ~300ms to enter scrub mode, then the side of the box your finger sits on
+ * decides direction and how far out decides speed.
  *
- * Horizontal rather than vertical on purpose: the screen scrolls vertically, so
- * an up/down drag here would fight the page.
+ * Position-based rather than delta-based on purpose: a delta drag runs out of
+ * screen, and running out of screen should not mean running out of numbers.
+ * Once scrubbing, the finger can travel anywhere -- only which side it is on
+ * matters.
+ *
+ * Both gestures live in ONE pointerInput. Two separate handlers on the same
+ * element fight, and the drag one wins, which is why tapping stopped working.
+ */
+@Composable
+fun ScrubbableText(
+    text: String,
+    onTapToEdit: () -> Unit,
+    onNudge: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+    style: TextStyle = TextStyle.Default
+) {
+    var scrubbing by remember { mutableStateOf(false) }
+    val pointerX = remember { mutableStateOf(0f) }
+    val boxWidth = remember { mutableStateOf(1f) }
+
+    val nudge by rememberUpdatedState(onNudge)
+    val tap by rememberUpdatedState(onTapToEdit)
+    val haptics = LocalHapticFeedback.current
+
+    LaunchedEffect(scrubbing) {
+        if (!scrubbing) return@LaunchedEffect
+        while (true) {
+            val half = (boxWidth.value / 2f).coerceAtLeast(1f)
+            val offset = pointerX.value - half
+            val reach = (abs(offset) / half).coerceIn(0f, 1.6f)
+            if (reach > 0.18f) {
+                nudge(if (offset > 0f) 1 else -1)
+                val speed = ((reach - 0.18f) / 1.42f).coerceIn(0f, 1f)
+                delay((200f - 175f * speed).toLong())
+            } else {
+                delay(60)
+            }
+        }
+    }
+
+    Text(
+        text,
+        style = style,
+        color = if (scrubbing) MaterialTheme.colorScheme.primary
+        else MaterialTheme.colorScheme.onSurface,
+        textAlign = TextAlign.Center,
+        modifier = modifier.pointerInput(Unit) {
+            awaitPointerEventScope {
+                while (true) {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    boxWidth.value = size.width.toFloat()
+                    pointerX.value = down.position.x
+
+                    var releasedEarly = false
+                    val settled = withTimeoutOrNull(300L) {
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull { it.id == down.id }
+                            if (change == null) {
+                                releasedEarly = true
+                                break
+                            }
+                            pointerX.value = change.position.x
+                            if (!change.pressed) {
+                                releasedEarly = true
+                                break
+                            }
+                        }
+                    }
+
+                    if (settled != null && releasedEarly) {
+                        tap()
+                    } else {
+                        scrubbing = true
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                            pointerX.value = change.position.x
+                            change.consume()
+                            if (!change.pressed) break
+                        }
+                        scrubbing = false
+                    }
+                }
+            }
+        }
+    )
+}
+
+/**
+ * Shows a number. Tap to type it, hold to scrub it.
  */
 @Composable
 fun EditableNumber(
@@ -198,8 +291,7 @@ fun EditableNumber(
     onValueChange: (Int) -> Unit,
     min: Int,
     max: Int,
-    modifier: Modifier = Modifier,
-    dragStepDp: Float = 14f
+    modifier: Modifier = Modifier
 ) {
     var editing by remember { mutableStateOf(false) }
     var buffer by remember { mutableStateOf("") }
@@ -209,8 +301,7 @@ fun EditableNumber(
     val callback by rememberUpdatedState(onValueChange)
 
     fun commit() {
-        val parsed = buffer.toIntOrNull()
-        if (parsed != null) callback(parsed.coerceIn(min, max))
+        buffer.toIntOrNull()?.let { callback(it.coerceIn(min, max)) }
         editing = false
     }
 
@@ -237,37 +328,15 @@ fun EditableNumber(
         )
         LaunchedEffect(Unit) { focusRequester.requestFocus() }
     } else {
-        Text(
-            value.toString(),
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-            textAlign = TextAlign.Center,
-            modifier = modifier
-                .pointerInput(Unit) {
-                    detectTapGestures(onTap = {
-                        buffer = current.toString()
-                        editing = true
-                    })
-                }
-                .pointerInput(Unit) {
-                    var accumulated = 0f
-                    val threshold = dragStepDp * density
-                    detectHorizontalDragGestures(
-                        onDragEnd = { accumulated = 0f },
-                        onDragCancel = { accumulated = 0f }
-                    ) { change, delta ->
-                        change.consume()
-                        accumulated += delta
-                        while (accumulated >= threshold) {
-                            accumulated -= threshold
-                            callback((current + 1).coerceIn(min, max))
-                        }
-                        while (accumulated <= -threshold) {
-                            accumulated += threshold
-                            callback((current - 1).coerceIn(min, max))
-                        }
-                    }
-                }
+        ScrubbableText(
+            text = value.toString(),
+            onTapToEdit = {
+                buffer = current.toString()
+                editing = true
+            },
+            onNudge = { step -> callback((current + step).coerceIn(min, max)) },
+            modifier = modifier,
+            style = MaterialTheme.typography.titleMedium
         )
     }
 }

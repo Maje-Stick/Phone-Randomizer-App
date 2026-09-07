@@ -1,6 +1,11 @@
 package com.majestick.randomizer
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -13,16 +18,19 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -33,12 +41,32 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -99,6 +127,151 @@ fun ToolScaffold(
     }
 }
 
+/**
+ * Fires once on press, then repeats while held. Holding twenty taps' worth of
+ * increments is the whole point -- tapping fifty times is not a UI.
+ */
+@Composable
+private fun RepeatIconButton(
+    icon: ImageVector,
+    description: String,
+    enabled: Boolean,
+    onStep: () -> Unit
+) {
+    val scope = rememberCoroutineScope()
+    val step by rememberUpdatedState(onStep)
+    val haptics = LocalHapticFeedback.current
+
+    Box(
+        modifier = Modifier
+            .size(40.dp)
+            .background(
+                if (enabled) MaterialTheme.colorScheme.surfaceVariant
+                else MaterialTheme.colorScheme.background,
+                CircleShape
+            )
+            .border(
+                1.dp,
+                if (enabled) MaterialTheme.colorScheme.outline
+                else MaterialTheme.colorScheme.background,
+                CircleShape
+            )
+            .pointerInput(enabled) {
+                if (!enabled) return@pointerInput
+                detectTapGestures(
+                    onPress = {
+                        step()
+                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        val job = scope.launch {
+                            delay(450)
+                            while (true) {
+                                step()
+                                delay(70)
+                            }
+                        }
+                        tryAwaitRelease()
+                        job.cancel()
+                    }
+                )
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            icon,
+            contentDescription = description,
+            tint = if (enabled) MaterialTheme.colorScheme.onSurface
+            else MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(18.dp)
+        )
+    }
+}
+
+/**
+ * Shows a number. Tap it to type one; drag sideways to nudge it.
+ *
+ * Horizontal rather than vertical on purpose: the screen scrolls vertically, so
+ * an up/down drag here would fight the page.
+ */
+@Composable
+fun EditableNumber(
+    value: Int,
+    onValueChange: (Int) -> Unit,
+    min: Int,
+    max: Int,
+    modifier: Modifier = Modifier,
+    dragStepDp: Float = 14f
+) {
+    var editing by remember { mutableStateOf(false) }
+    var buffer by remember { mutableStateOf("") }
+    val focusRequester = remember { FocusRequester() }
+
+    val current by rememberUpdatedState(value)
+    val callback by rememberUpdatedState(onValueChange)
+
+    fun commit() {
+        val parsed = buffer.toIntOrNull()
+        if (parsed != null) callback(parsed.coerceIn(min, max))
+        editing = false
+    }
+
+    if (editing) {
+        BasicTextField(
+            value = buffer,
+            onValueChange = { raw -> buffer = raw.filter { it.isDigit() || it == '-' } },
+            singleLine = true,
+            textStyle = TextStyle(
+                color = MaterialTheme.colorScheme.primary,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center
+            ),
+            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Number,
+                imeAction = ImeAction.Done
+            ),
+            keyboardActions = KeyboardActions(onDone = { commit() }),
+            modifier = modifier
+                .focusRequester(focusRequester)
+                .onFocusChanged { if (!it.isFocused && editing) commit() }
+        )
+        LaunchedEffect(Unit) { focusRequester.requestFocus() }
+    } else {
+        Text(
+            value.toString(),
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            textAlign = TextAlign.Center,
+            modifier = modifier
+                .pointerInput(Unit) {
+                    detectTapGestures(onTap = {
+                        buffer = current.toString()
+                        editing = true
+                    })
+                }
+                .pointerInput(Unit) {
+                    var accumulated = 0f
+                    val threshold = dragStepDp * density
+                    detectHorizontalDragGestures(
+                        onDragEnd = { accumulated = 0f },
+                        onDragCancel = { accumulated = 0f }
+                    ) { change, delta ->
+                        change.consume()
+                        accumulated += delta
+                        while (accumulated >= threshold) {
+                            accumulated -= threshold
+                            callback((current + 1).coerceIn(min, max))
+                        }
+                        while (accumulated <= -threshold) {
+                            accumulated += threshold
+                            callback((current - 1).coerceIn(min, max))
+                        }
+                    }
+                }
+        )
+    }
+}
+
 @Composable
 fun Stepper(
     label: String,
@@ -120,21 +293,27 @@ fun Stepper(
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.weight(1f)
         )
-        FilledTonalIconButton(
-            onClick = { onValueChange((value - step).coerceIn(min, max)) },
+        RepeatIconButton(
+            icon = Icons.Filled.Remove,
+            description = "Decrease $label",
             enabled = value > min
-        ) { Icon(Icons.Filled.Remove, contentDescription = "Decrease $label") }
-        Text(
-            value.toString(),
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.width(64.dp)
+        ) { onValueChange((value - step).coerceIn(min, max)) }
+
+        EditableNumber(
+            value = value,
+            onValueChange = onValueChange,
+            min = min,
+            max = max,
+            modifier = Modifier
+                .width(72.dp)
+                .padding(horizontal = 4.dp)
         )
-        FilledTonalIconButton(
-            onClick = { onValueChange((value + step).coerceIn(min, max)) },
+
+        RepeatIconButton(
+            icon = Icons.Filled.Add,
+            description = "Increase $label",
             enabled = value < max
-        ) { Icon(Icons.Filled.Add, contentDescription = "Increase $label") }
+        ) { onValueChange((value + step).coerceIn(min, max)) }
     }
 }
 

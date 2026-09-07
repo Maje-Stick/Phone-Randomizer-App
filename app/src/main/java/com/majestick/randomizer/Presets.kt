@@ -101,7 +101,8 @@ fun PresetBar(
 ) {
     val context = LocalContext.current
     var presets by remember(toolId) { mutableStateOf(PresetStore.load(context, toolId)) }
-    var loadedName by remember(toolId) { mutableStateOf<String?>(null) }
+    // Draft-scoped so the loaded preset survives leaving and re-entering the tool.
+    var loadedName by draft<String?>("presetbar.loaded.$toolId", null)
     var open by remember { mutableStateOf(false) }
 
     Row(

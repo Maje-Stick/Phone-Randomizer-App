@@ -2,6 +2,8 @@ package com.majestick.randomizer
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,6 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -31,13 +34,20 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -126,7 +136,7 @@ fun EntryListEditor(
             )
             Spacer(Modifier.width(8.dp))
             Text(
-                "Entry",
+                "Entry  \u00b7  tap a weight to type, drag it sideways to nudge",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -139,16 +149,11 @@ fun EntryListEditor(
                     .padding(bottom = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                CompactField(
-                    value = if (entry.weight == 1.0) "1" else trimNumber(entry.weight),
-                    onValueChange = { raw ->
-                        val cleaned = raw.filter { it.isDigit() || it == '.' }
-                        val weight = cleaned.toDoubleOrNull() ?: 0.0
-                        onChange(entries.replaceAt(index, entry.copy(weight = weight)))
+                WeightBox(
+                    weight = entry.weight,
+                    onWeightChange = {
+                        onChange(entries.replaceAt(index, entry.copy(weight = it)))
                     },
-                    placeholder = "1",
-                    numeric = true,
-                    centered = true,
                     modifier = Modifier.width(58.dp)
                 )
                 Spacer(Modifier.width(8.dp))
@@ -247,3 +252,97 @@ private fun <T> List<T>.replaceAt(index: Int, value: T): List<T> =
 fun trimNumber(value: Double): String =
     if (value == value.toLong().toDouble()) value.toLong().toString()
     else "%.2f".format(value).trimEnd('0').trimEnd('.')
+
+/**
+ * Tap to type an exact weight, drag left or right to nudge it a step at a time.
+ * Horizontal because the screen scrolls vertically -- an up/down drag here would
+ * fight the page.
+ */
+@Composable
+private fun WeightBox(
+    weight: Double,
+    onWeightChange: (Double) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var editing by remember { mutableStateOf(false) }
+    var buffer by remember { mutableStateOf("") }
+    val focusRequester = remember { FocusRequester() }
+
+    val current by rememberUpdatedState(weight)
+    val callback by rememberUpdatedState(onWeightChange)
+
+    fun commit() {
+        val parsed = buffer.toDoubleOrNull()
+        if (parsed != null) callback(parsed.coerceIn(0.0, 9999.0))
+        editing = false
+    }
+
+    Box(
+        modifier = modifier
+            .heightIn(min = 42.dp)
+            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(10.dp))
+            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(10.dp))
+            .padding(horizontal = 6.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        if (editing) {
+            BasicTextField(
+                value = buffer,
+                onValueChange = { raw -> buffer = raw.filter { it.isDigit() || it == '.' } },
+                singleLine = true,
+                textStyle = TextStyle(
+                    color = MaterialTheme.colorScheme.primary,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center
+                ),
+                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Decimal,
+                    imeAction = ImeAction.Done
+                ),
+                keyboardActions = KeyboardActions(onDone = { commit() }),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(focusRequester)
+                    .onFocusChanged { if (!it.isFocused && editing) commit() }
+            )
+            LaunchedEffect(Unit) { focusRequester.requestFocus() }
+        } else {
+            Text(
+                trimNumber(weight),
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .pointerInput(Unit) {
+                        detectTapGestures(onTap = {
+                            buffer = trimNumber(current)
+                            editing = true
+                        })
+                    }
+                    .pointerInput(Unit) {
+                        var accumulated = 0f
+                        val threshold = 14f * density
+                        detectHorizontalDragGestures(
+                            onDragEnd = { accumulated = 0f },
+                            onDragCancel = { accumulated = 0f }
+                        ) { change, delta ->
+                            change.consume()
+                            accumulated += delta
+                            while (accumulated >= threshold) {
+                                accumulated -= threshold
+                                callback((current + 1.0).coerceAtMost(9999.0))
+                            }
+                            while (accumulated <= -threshold) {
+                                accumulated += threshold
+                                callback((current - 1.0).coerceAtLeast(0.0))
+                            }
+                        }
+                    }
+            )
+        }
+    }
+}

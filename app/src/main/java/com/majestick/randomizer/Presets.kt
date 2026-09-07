@@ -1,23 +1,29 @@
 package com.majestick.randomizer
 
 import android.content.Context
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Bookmarks
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -29,6 +35,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import org.json.JSONArray
 import org.json.JSONObject
@@ -80,11 +87,8 @@ object PresetStore {
 }
 
 /**
- * Tap a chip to load a preset, the x to delete it. Saving under an existing
- * name overwrites it, which doubles as "update".
- *
- * @param capture reads the tool's current settings into a storable map
- * @param apply pushes a stored map back into the tool's state
+ * Entry point shown on each tool screen. Opens the manager; nothing destructive
+ * is reachable without going through it first.
  */
 @Composable
 fun PresetBar(
@@ -94,104 +98,214 @@ fun PresetBar(
 ) {
     val context = LocalContext.current
     var presets by remember(toolId) { mutableStateOf(PresetStore.load(context, toolId)) }
-    var showDialog by remember { mutableStateOf(false) }
-    var draftName by remember { mutableStateOf("") }
+    var loadedName by remember(toolId) { mutableStateOf<String?>(null) }
+    var open by remember { mutableStateOf(false) }
 
-    Column(Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                "Presets",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.weight(1f)
-            )
-            TextButton(onClick = {
-                draftName = ""
-                showDialog = true
-            }) {
-                Text("Save current")
-            }
-        }
-
-        if (presets.isEmpty()) {
-            Text(
-                "Set this tool up how you like, then save it here.",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        } else {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                presets.forEach { preset ->
-                    AssistChip(
-                        onClick = { apply(preset.values) },
-                        label = { Text(preset.name) },
-                        trailingIcon = {
-                            Icon(
-                                Icons.Filled.Close,
-                                contentDescription = "Delete ${preset.name}",
-                                modifier = Modifier
-                                    .size(18.dp)
-                                    .clickable {
-                                        presets = presets.filterNot { it.name == preset.name }
-                                        PresetStore.save(context, toolId, presets)
-                                    }
-                            )
-                        }
-                    )
-                }
-            }
-        }
+    OutlinedButton(
+        onClick = { open = true },
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Icon(Icons.Filled.Bookmarks, contentDescription = null, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.size(10.dp))
+        Text(
+            loadedName?.let { "Preset: $it" } ?: "Presets",
+            style = MaterialTheme.typography.titleMedium
+        )
     }
 
-    if (showDialog) {
-        val trimmed = draftName.trim()
-        val willOverwrite = presets.any { it.name.equals(trimmed, ignoreCase = true) }
-
-        AlertDialog(
-            onDismissRequest = { showDialog = false },
-            title = { Text("Save preset") },
-            text = {
-                Column {
-                    OutlinedTextField(
-                        value = draftName,
-                        onValueChange = { draftName = it },
-                        label = { Text("Name") },
-                        singleLine = true
-                    )
-                    if (willOverwrite) {
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            "A preset called \"$trimmed\" already exists. Saving replaces it.",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
+    if (open) {
+        PresetManagerDialog(
+            presets = presets,
+            onDismiss = { open = false },
+            onLoad = { preset ->
+                apply(preset.values)
+                loadedName = preset.name
+                open = false
             },
-            confirmButton = {
-                TextButton(
-                    enabled = trimmed.isNotEmpty(),
-                    onClick = {
-                        val kept = presets.filterNot { it.name.equals(trimmed, ignoreCase = true) }
-                        presets = (kept + Preset(trimmed, capture()))
-                            .sortedBy { it.name.lowercase() }
-                        PresetStore.save(context, toolId, presets)
-                        showDialog = false
+            onSave = { name ->
+                val kept = presets.filterNot { it.name.equals(name, ignoreCase = true) }
+                presets = (kept + Preset(name, capture())).sortedBy { it.name.lowercase() }
+                PresetStore.save(context, toolId, presets)
+                loadedName = name
+            },
+            onDelete = { name ->
+                presets = presets.filterNot { it.name.equals(name, ignoreCase = true) }
+                PresetStore.save(context, toolId, presets)
+                if (loadedName.equals(name, ignoreCase = true)) loadedName = null
+            }
+        )
+    }
+}
+
+/**
+ * Tap a preset to select it, which copies its name into the field. Double tap to
+ * load it outright. Save and Delete both confirm before doing anything.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun PresetManagerDialog(
+    presets: List<Preset>,
+    onDismiss: () -> Unit,
+    onLoad: (Preset) -> Unit,
+    onSave: (String) -> Unit,
+    onDelete: (String) -> Unit
+) {
+    var selected by remember { mutableStateOf<String?>(null) }
+    var draftName by remember { mutableStateOf("") }
+    var confirmOverwrite by remember { mutableStateOf<String?>(null) }
+    var confirmDelete by remember { mutableStateOf<String?>(null) }
+
+    val trimmed = draftName.trim()
+    val matchesExisting = presets.any { it.name.equals(trimmed, ignoreCase = true) }
+    val selectedPreset = presets.firstOrNull { it.name == selected }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Presets") },
+        text = {
+            Column(Modifier.fillMaxWidth()) {
+                if (presets.isEmpty()) {
+                    Text(
+                        "Nothing saved yet. Set the tool up, type a name below and hit Save.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 80.dp, max = 200.dp)
+                            .border(
+                                1.dp,
+                                MaterialTheme.colorScheme.outline,
+                                RoundedCornerShape(12.dp)
+                            )
+                    ) {
+                        Column(Modifier.verticalScroll(rememberScrollState())) {
+                            presets.forEach { preset ->
+                                val isSelected = preset.name == selected
+                                Text(
+                                    preset.name,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (isSelected) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(
+                                            if (isSelected) MaterialTheme.colorScheme.surfaceVariant
+                                            else MaterialTheme.colorScheme.surface
+                                        )
+                                        .combinedClickable(
+                                            onClick = {
+                                                selected = preset.name
+                                                draftName = preset.name
+                                            },
+                                            onDoubleClick = { onLoad(preset) }
+                                        )
+                                        .padding(horizontal = 14.dp, vertical = 12.dp)
+                                )
+                            }
+                        }
                     }
-                ) {
-                    Text(if (willOverwrite) "Overwrite" else "Save")
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "Tap to select, double tap to load.",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
+
+                Spacer(Modifier.height(14.dp))
+                OutlinedTextField(
+                    value = draftName,
+                    onValueChange = { draftName = it },
+                    label = { Text("Preset name") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                if (matchesExisting) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "Saving will replace \"$trimmed\".",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                Spacer(Modifier.height(10.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedButton(
+                        onClick = { selectedPreset?.let(onLoad) },
+                        enabled = selectedPreset != null,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.weight(1f)
+                    ) { Text("Load") }
+
+                    OutlinedButton(
+                        onClick = { confirmDelete = selected },
+                        enabled = selectedPreset != null,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.weight(1f)
+                    ) { Text("Delete") }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = trimmed.isNotEmpty(),
+                onClick = {
+                    if (matchesExisting) confirmOverwrite = trimmed
+                    else {
+                        onSave(trimmed)
+                        onDismiss()
+                    }
+                }
+            ) { Text("Save") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Close") }
+        }
+    )
+
+    confirmOverwrite?.let { name ->
+        AlertDialog(
+            onDismissRequest = { confirmOverwrite = null },
+            title = { Text("Overwrite preset?") },
+            text = { Text("\"$name\" already exists. Replace it with the current settings?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    onSave(name)
+                    confirmOverwrite = null
+                    onDismiss()
+                }) { Text("Overwrite") }
             },
             dismissButton = {
-                TextButton(onClick = { showDialog = false }) { Text("Cancel") }
+                TextButton(onClick = { confirmOverwrite = null }) { Text("Cancel") }
+            }
+        )
+    }
+
+    confirmDelete?.let { name ->
+        AlertDialog(
+            onDismissRequest = { confirmDelete = null },
+            title = { Text("Delete preset?") },
+            text = { Text("\"$name\" will be removed. This can't be undone.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    onDelete(name)
+                    if (selected == name) selected = null
+                    confirmDelete = null
+                }) { Text("Delete") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDelete = null }) { Text("Cancel") }
             }
         )
     }

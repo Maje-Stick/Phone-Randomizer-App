@@ -4,13 +4,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
@@ -48,6 +45,12 @@ fun CoinScreen(onBack: () -> Unit) {
     }) {
         ResultBoard(headline, detail, "Flip once, or flip a hundred times and see the split.")
         SectionSpacer()
+        PresetBar(
+            toolId = "coin",
+            capture = { mapOf("count" to count.toString()) },
+            apply = { count = it.int("count", count) }
+        )
+        SectionSpacer()
         Stepper("Coins", count, { count = it }, min = 1, max = 200)
     }
 }
@@ -65,6 +68,15 @@ fun DiceScreen(onBack: () -> Unit) {
         detail = if (rolls.size == 1) null else rolls.joinToString(" + ") + " = ${rolls.sum()}"
     }) {
         ResultBoard(headline, detail, "Pick a die and how many. The total lands here.")
+        SectionSpacer()
+        PresetBar(
+            toolId = "dice",
+            capture = { mapOf("count" to count.toString(), "sides" to sides.toString()) },
+            apply = {
+                count = it.int("count", count)
+                sides = it.int("sides", sides)
+            }
+        )
         SectionSpacer()
         Text(
             "Die",
@@ -110,6 +122,24 @@ fun NumberScreen(onBack: () -> Unit) {
     }) {
         ResultBoard(headline, detail, "Set a range. Draw one number or a whole batch.")
         SectionSpacer()
+        PresetBar(
+            toolId = "number",
+            capture = {
+                mapOf(
+                    "min" to min,
+                    "max" to max,
+                    "count" to count.toString(),
+                    "unique" to unique.toString()
+                )
+            },
+            apply = {
+                min = it.str("min", min)
+                max = it.str("max", max)
+                count = it.int("count", count)
+                unique = it.bool("unique", unique)
+            }
+        )
+        SectionSpacer()
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             NumberInput("Lowest", min, { min = it }, Modifier.weight(1f))
             NumberInput("Highest", max, { max = it }, Modifier.weight(1f))
@@ -141,6 +171,22 @@ fun PickScreen(onBack: () -> Unit) {
     }) {
         ResultBoard(headline, detail, "Add your options below, then pick.")
         SectionSpacer()
+        PresetBar(
+            toolId = "pick",
+            capture = {
+                mapOf(
+                    "raw" to raw,
+                    "count" to count.toString(),
+                    "unique" to unique.toString()
+                )
+            },
+            apply = {
+                raw = it.str("raw", raw)
+                count = it.int("count", count)
+                unique = it.bool("unique", unique)
+            }
+        )
+        SectionSpacer()
         ItemsInput(raw, { raw = it })
         Spacer(Modifier.height(8.dp))
         Stepper("How many", count, { count = it }, min = 1, max = 100)
@@ -160,6 +206,12 @@ fun ShuffleScreen(onBack: () -> Unit) {
     }) {
         ResultBoard(headline, null, "Put a list in, get it back in a new order.")
         SectionSpacer()
+        PresetBar(
+            toolId = "shuffle",
+            capture = { mapOf("raw" to raw) },
+            apply = { raw = it.str("raw", raw) }
+        )
+        SectionSpacer()
         ItemsInput(raw, { raw = it })
     }
 }
@@ -178,6 +230,15 @@ fun TeamsScreen(onBack: () -> Unit) {
             .joinToString("\n\n")
     }) {
         ResultBoard(headline, null, "Names go in, balanced teams come out.")
+        SectionSpacer()
+        PresetBar(
+            toolId = "teams",
+            capture = { mapOf("raw" to raw, "teams" to teams.toString()) },
+            apply = {
+                raw = it.str("raw", raw)
+                teams = it.int("teams", teams)
+            }
+        )
         SectionSpacer()
         ItemsInput(raw, { raw = it }, label = "Names")
         Spacer(Modifier.height(8.dp))
@@ -205,10 +266,26 @@ fun PasswordScreen(onBack: () -> Unit) {
             detail = "${pw.length} characters. Tap the corner icon to copy."
         }
     }) {
-        ResultBoard(
-            headline,
-            detail,
-            "Turn on at least one character set, then generate."
+        ResultBoard(headline, detail, "Turn on at least one character set, then generate.")
+        SectionSpacer()
+        PresetBar(
+            toolId = "password",
+            capture = {
+                mapOf(
+                    "length" to length.toString(),
+                    "upper" to upper.toString(),
+                    "lower" to lower.toString(),
+                    "digits" to digits.toString(),
+                    "symbols" to symbols.toString()
+                )
+            },
+            apply = {
+                length = it.int("length", length)
+                upper = it.bool("upper", upper)
+                lower = it.bool("lower", lower)
+                digits = it.bool("digits", digits)
+                symbols = it.bool("symbols", symbols)
+            }
         )
         SectionSpacer()
         Stepper("Length", length, { length = it }, min = 4, max = 128)
@@ -238,6 +315,12 @@ fun CardsScreen(onBack: () -> Unit) {
         else "${cards.size} cards, no duplicates"
     }) {
         ResultBoard(headline, detail, "Draw from a freshly shuffled deck.")
+        SectionSpacer()
+        PresetBar(
+            toolId = "cards",
+            capture = { mapOf("count" to count.toString()) },
+            apply = { count = it.int("count", count) }
+        )
         SectionSpacer()
         Stepper("Cards", count, { count = it }, min = 1, max = 52)
     }
@@ -297,6 +380,12 @@ fun WeightedScreen(onBack: () -> Unit) {
     }) {
         ResultBoard(headline, detail, "Give each option a weight. Bigger weight, better odds.")
         SectionSpacer()
+        PresetBar(
+            toolId = "weighted",
+            capture = { mapOf("raw" to raw) },
+            apply = { raw = it.str("raw", raw) }
+        )
+        SectionSpacer()
         ItemsInput(
             raw,
             { raw = it },
@@ -330,6 +419,18 @@ fun DateScreen(onBack: () -> Unit) {
     }) {
         ResultBoard(headline, detail, "Pick a window and draw a date from inside it.")
         SectionSpacer()
+        PresetBar(
+            toolId = "date",
+            capture = {
+                mapOf("start" to start, "end" to end, "withTime" to withTime.toString())
+            },
+            apply = {
+                start = it.str("start", start)
+                end = it.str("end", end)
+                withTime = it.bool("withTime", withTime)
+            }
+        )
+        SectionSpacer()
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             NumberInput("From (YYYY-MM-DD)", start, { start = it }, Modifier.weight(1f))
         }
@@ -351,6 +452,12 @@ fun LetterScreen(onBack: () -> Unit) {
         headline = randomLetters(count)
     }) {
         ResultBoard(headline, null, "Handy for word games and quick labels.")
+        SectionSpacer()
+        PresetBar(
+            toolId = "letter",
+            capture = { mapOf("count" to count.toString()) },
+            apply = { count = it.int("count", count) }
+        )
         SectionSpacer()
         Stepper("Letters", count, { count = it }, min = 1, max = 100)
     }

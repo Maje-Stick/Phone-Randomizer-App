@@ -12,8 +12,8 @@ android {
         applicationId = "com.majestick.randomizer"
         minSdk = 26
         targetSdk = 35
-        versionCode = 19
-        versionName = "2.7"
+        versionCode = 20
+        versionName = "2.8"
     }
 
     // The signing key is supplied by the environment, never by the repository.

@@ -293,6 +293,11 @@ private fun HomeScreen(
                 ) {
                     Column(Modifier.weight(1f)) {
                         Text(
+                            "Sweet Simple",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
                             "Randomizer",
                             style = MaterialTheme.typography.displayMedium,
                             color = MaterialTheme.colorScheme.onBackground

@@ -279,9 +279,10 @@ fun EntryListEditor(
     val emit: (((List<Entry>) -> List<Entry>) -> Unit) = { transform ->
         onChange { list ->
             val out = transform(list)
-            DebugLog.trace("entries") { "${list.size} rows -> ${out.size}, weights ["
-                    + out.joinToString("," } { trimNumber(it.weight) } + "]"
-            )
+            DebugLog.trace("entries") {
+                "${list.size} rows -> ${out.size}, weights [" +
+                    out.joinToString(",") { trimNumber(it.weight) } + "]"
+            }
             out
         }
     }

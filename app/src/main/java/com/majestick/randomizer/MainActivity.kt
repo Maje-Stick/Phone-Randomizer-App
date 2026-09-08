@@ -409,7 +409,6 @@ private fun ToolCard(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ThemeRow(
     theme: AppTheme,
@@ -462,6 +461,7 @@ private fun ThemeRow(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SettingsScreen(
     themeId: String,

@@ -1,56 +1,44 @@
-# Randomizer
+# Sweet Simple Randomizer
 
-A single-purpose Android app: thirteen randomizers, one tap each.
+Ten ways to stop deciding, in one small app that opens instantly and gets out of your way.
 
-Coin flip · Dice · Number range · Pick from a list · Shuffle order · Split into teams ·
-Weighted pick · Password · Draw cards · Yes or no · Random color · Random date · Random letters
+No ads. No account. No internet permission. Nothing leaves your phone.
 
-Kotlin + Jetpack Compose, Material 3, no third-party libraries, no network permission,
-no analytics. Minimum Android 8.0 (API 26).
+## What's in it
 
-## Build it from your phone
+- **List** — pick from anything you type in. Give entries different weights when some options should come up more often than others.
+- **Number range** — a number between any two bounds.
+- **Coin flip** — heads or tails.
+- **Random colour** — a colour and its hex code, ready to copy.
+- **Split into teams** — deal a list of names into balanced groups.
+- **Dice** — any number of dice, any number of sides.
+- **Distribution** — split an amount across people or buckets at random.
+- **Password** — a strong one, with control over what goes into it.
+- **Random date** — a date between two dates.
+- **Draw cards** — pull cards from a standard deck.
 
-You don't need a PC. GitHub compiles the APK for you.
+Hold any card on the home screen to drag it somewhere else. The app remembers where you put it.
 
-1. Create a new **private** repo on github.com (the mobile site works fine).
-2. Upload the contents of this folder to it. The GitHub mobile web UI can upload files,
-   but it's fussy with folders — the easiest route is an Android git client
-   (Termux with `git`, or an app like MGit) to push the whole tree at once.
-3. The push triggers `.github/workflows/build.yml` automatically. Watch the **Actions**
-   tab; the build takes about 3–5 minutes on a cold cache.
-4. When it's green, open the run and download the **randomizer-debug-apk** artifact.
-   It arrives as a `.zip` — extract it and install the `.apk` inside.
-5. Android will ask you to allow installs from your browser or file manager. That's
-   expected for anything not from the Play Store.
+## About the randomness
 
-You can also trigger a build by hand from Actions → Build APK → **Run workflow**.
+Every result comes from the operating system's cryptographic random source, not the usual quick-and-dirty shuffle. Ranges are generated without modulo bias, so a 1-in-6 roll really is 1-in-6 and not 1-in-6-ish. It costs nothing, and it means the results hold up if you're using them for something that matters.
 
-## Build it on a PC
+## Privacy
 
-Open the folder in Android Studio (Ladybug or newer). It will offer to generate the
-Gradle wrapper on first sync. Then `Run`, or `./gradlew assembleDebug` for an APK at
-`app/build/outputs/apk/debug/`.
+The app requests no permissions at all. No network access, no analytics, no crash reporting that phones home. The debug log lives in Settings and stays on your device unless you deliberately copy or share it.
 
-## What's where
+## How this was built
 
-| File | What it holds |
-| --- | --- |
-| `Randomizers.kt` | All the randomization logic as pure functions, no UI |
-| `ToolScreens.kt` | One composable per tool |
-| `Ui.kt` | Shared pieces: scaffold, result board, stepper, inputs |
-| `Theme.kt` | Colors and the type scale |
-| `MainActivity.kt` | Tool registry and the home grid |
+Heads up, just throwing it out there for the people who care: **I didn't write any of the code myself.** All of the coding was done by Claude.
 
-To add a fourteenth randomizer: write the function in `Randomizers.kt`, write a screen in
-`ToolScreens.kt` modeled on `LetterScreen`, then add one line to `TOOLS` and one branch to
-the `when` in `MainActivity.kt`.
+I did, however, design the whole app — every screen, every interaction, the entire look and feel. I tested all of it on real hardware, found the bugs, gave Claude the feedback, and refined the thing until it was right. Several features went through four or five rounds before I was happy with them.
 
-## Notes on the randomness
+**100% Claude developed, 100% human designed.**
 
-Everything uses `kotlin.random.Random` except the password generator, which uses
-`SecureRandom`. The password generator also guarantees at least one character from every
-enabled set and skips look-alike characters (`I l 1 O 0`) so you can read a password off
-the screen without squinting.
+I'd rather say that up front than have someone find out later and feel misled. If the idea puts you off, fair enough. If you judge it on whether it works well, I think it holds up.
 
-The debug APK is signed with GitHub's throwaway debug key. That's fine for your own
-device; you'd need a real keystore before distributing it.
+## Licence
+
+Copyright © 2026. All rights reserved.
+
+The source is public so you can read it, check what the app actually does, and see how it was built. That is not permission to redistribute it, publish it to an app store, or ship it under another name.

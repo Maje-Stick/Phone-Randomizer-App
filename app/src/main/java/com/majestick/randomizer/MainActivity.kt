@@ -113,16 +113,16 @@ private data class Tool(
 )
 
 private val TOOLS = listOf(
-    Tool("coin", "Coin flip", Icons.Filled.Paid),
-    Tool("dice", "Dice", Icons.Filled.Casino),
-    Tool("number", "Number range", Icons.Filled.Numbers),
     Tool("list", "List", Icons.Filled.Layers),
-    Tool("teams", "Split into teams", Icons.Filled.Groups),
-    Tool("password", "Password", Icons.Filled.Password),
-    Tool("cards", "Draw cards", Icons.Filled.Style),
+    Tool("number", "Number range", Icons.Filled.Numbers),
+    Tool("coin", "Coin flip", Icons.Filled.Paid),
     Tool("color", "Random color", Icons.Filled.Palette),
+    Tool("teams", "Split into teams", Icons.Filled.Groups),
+    Tool("dice", "Dice", Icons.Filled.Casino),
+    Tool("distribution", "Distribution", Icons.Filled.ShowChart),
+    Tool("password", "Password", Icons.Filled.Password),
     Tool("date", "Random date", Icons.Filled.Event),
-    Tool("distribution", "Distribution", Icons.Filled.ShowChart)
+    Tool("cards", "Draw cards", Icons.Filled.Style)
 )
 
 @Composable
@@ -149,10 +149,14 @@ fun App(themeId: String, onThemeChange: (String) -> Unit) {
     when (openTool) {
         null -> HomeScreen(
             onOpen = { openTool = it },
-            onSettings = { openTool = "settings" },
-            onDebug = { openTool = "debug" }
+            onSettings = { openTool = "settings" }
         )
-        "settings" -> SettingsScreen(themeId, onThemeChange, back)
+        "settings" -> SettingsScreen(
+            themeId = themeId,
+            onThemeChange = onThemeChange,
+            onDebug = { openTool = "debug" },
+            onBack = back
+        )
         "debug" -> DebugScreen(back)
         "coin" -> CoinScreen(back)
         "dice" -> DiceScreen(back)
@@ -166,8 +170,7 @@ fun App(themeId: String, onThemeChange: (String) -> Unit) {
         "distribution" -> DistributionScreen(back)
         else -> HomeScreen(
             onOpen = { openTool = it },
-            onSettings = { openTool = "settings" },
-            onDebug = { openTool = "debug" }
+            onSettings = { openTool = "settings" }
         )
     }
 }
@@ -182,8 +185,7 @@ private fun LazyGridItemInfo.holds(point: Offset): Boolean =
 @Composable
 private fun HomeScreen(
     onOpen: (String) -> Unit,
-    onSettings: () -> Unit,
-    onDebug: () -> Unit
+    onSettings: () -> Unit
 ) {
     val context = LocalContext.current
     val haptics = LocalHapticFeedback.current
@@ -301,13 +303,6 @@ private fun HomeScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                    IconButton(onClick = onDebug) {
-                        Icon(
-                            Icons.Filled.BugReport,
-                            contentDescription = "Debug log",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
                     IconButton(onClick = onSettings) {
                         Icon(
                             Icons.Filled.Settings,
@@ -382,6 +377,7 @@ private fun ToolCard(
 private fun SettingsScreen(
     themeId: String,
     onThemeChange: (String) -> Unit,
+    onDebug: () -> Unit,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
@@ -483,6 +479,45 @@ private fun SettingsScreen(
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+
+            Spacer(Modifier.height(24.dp))
+            Text(
+                "Diagnostics",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(10.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        MaterialTheme.colorScheme.surfaceVariant,
+                        RoundedCornerShape(12.dp)
+                    )
+                    .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(12.dp))
+                    .clickable(onClick = onDebug)
+                    .padding(horizontal = 14.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Filled.BugReport,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "Debug log",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        "Activity log, plus any crash or freeze report.",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
             Spacer(Modifier.height(28.dp))
         }
     }

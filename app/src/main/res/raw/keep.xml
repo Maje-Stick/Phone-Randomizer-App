@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Artwork and sounds are resolved by name at runtime, so the shrinker cannot
+     see the references and would otherwise strip them from release builds. -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@drawable/art_*,@raw/draw_*,@raw/tap_*"
+    tools:shrinkMode="safe" />

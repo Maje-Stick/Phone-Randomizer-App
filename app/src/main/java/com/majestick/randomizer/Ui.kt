@@ -64,6 +64,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
@@ -169,6 +170,7 @@ private fun Modifier.tapOrHoldStep(
     val active by rememberUpdatedState(enabled)
     val haptics = LocalHapticFeedback.current
     val focus = LocalFocusManager.current
+    val view = LocalView.current
 
     LaunchedEffect(enabled) { DebugLog.trace("gesture", "$name enabled=$enabled") }
     DisposableEffect(Unit) {
@@ -219,6 +221,7 @@ private fun Modifier.tapOrHoldStep(
                             outcome = "released after holding"
                         } else {
                             outcome = "TAP at ${travel.toInt()}px"
+                            Sounds.click(view)
                             step()
                             haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         }

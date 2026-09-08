@@ -11,6 +11,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -97,7 +98,7 @@ class MainActivity : ComponentActivity() {
             RandomizerTheme(themeId) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
+                    color = Color.Transparent
                 ) {
                     App(
                         themeId = themeId,
@@ -149,9 +150,18 @@ fun App(themeId: String, onThemeChange: (String) -> Unit) {
             .collect { DebugLog.log("ime", if (it > 0) "keyboard visible, height ${it}px" else "keyboard hidden") }
     }
 
+    LaunchedEffect(themeId) { Sounds.useTheme(themeId) }
+
     BackHandler(enabled = openTool != null) { openTool = null }
 
     val back = { openTool = null }
+    val screen = when (openTool) {
+        null -> "home"
+        "settings", "help", "debug" -> openTool!!
+        else -> "tool"
+    }
+
+    ThemeBackdrop(themeId = themeId, screen = screen) {
     when (openTool) {
         null -> HomeScreen(
             onOpen = { openTool = it },
@@ -181,6 +191,7 @@ fun App(themeId: String, onThemeChange: (String) -> Unit) {
             onSettings = { openTool = "settings" },
             onHelp = { openTool = "help" }
         )
+    }
     }
 }
 
@@ -400,6 +411,58 @@ private fun ToolCard(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
+private fun ThemeRow(
+    theme: AppTheme,
+    selected: String,
+    onPick: (String) -> Unit
+) {
+    val view = LocalView.current
+    val isOn = theme.id == selected
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 8.dp)
+            .background(
+                if (isOn) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent,
+                RoundedCornerShape(12.dp)
+            )
+            .border(
+                1.dp,
+                if (isOn) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.outline,
+                RoundedCornerShape(12.dp)
+            )
+            .clickable {
+                Sounds.click(view)
+                DebugLog.log("settings", "theme -> ${theme.id}")
+                onPick(theme.id)
+            }
+            .padding(horizontal = 14.dp, vertical = 13.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(18.dp)
+                .background(theme.swatch, CircleShape)
+        )
+        Spacer(Modifier.width(12.dp))
+        Text(
+            theme.label,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f)
+        )
+        if (isOn) {
+            Icon(
+                Icons.Filled.Check,
+                contentDescription = "Selected",
+                tint = MaterialTheme.colorScheme.primary
+            )
+        }
+    }
+}
+
+@Composable
 private fun SettingsScreen(
     themeId: String,
     onThemeChange: (String) -> Unit,
@@ -432,58 +495,29 @@ private fun SettingsScreen(
                 .padding(horizontal = 20.dp)
         ) {
             Text(
-                "Theme",
+                "Colour themes",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(Modifier.height(10.dp))
+            Themes.plain.forEach { theme -> ThemeRow(theme, themeId, onThemeChange) }
 
-            Themes.all.forEach { theme ->
-                val selected = theme.id == themeId
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp)
-                        .background(
-                            if (selected) MaterialTheme.colorScheme.surfaceVariant
-                            else MaterialTheme.colorScheme.background,
-                            RoundedCornerShape(14.dp)
-                        )
-                        .border(
-                            1.dp,
-                            if (selected) MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.outline,
-                            RoundedCornerShape(14.dp)
-                        )
-                        .clickable {
-                            DebugLog.log("settings", "theme -> ${theme.id}")
-                            onThemeChange(theme.id)
-                        }
-                        .padding(horizontal = 16.dp, vertical = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Spacer(
-                        Modifier
-                            .size(22.dp)
-                            .background(theme.swatch, CircleShape)
-                    )
-                    Spacer(Modifier.size(14.dp))
-                    Text(
-                        theme.label,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.weight(1f)
-                    )
-                    if (selected) {
-                        Icon(
-                            Icons.Filled.Check,
-                            contentDescription = "Selected",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                }
-            }
+            Spacer(Modifier.height(22.dp))
+            Text(
+                "Artistic themes",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Each one paints artwork behind the app and brings its own "
+                    + "tap and draw sounds.",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(10.dp))
+            Themes.artistic.forEach { theme -> ThemeRow(theme, themeId, onThemeChange) }
+
             Spacer(Modifier.height(24.dp))
             Text(
                 "Sound",

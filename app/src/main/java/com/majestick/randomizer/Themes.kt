@@ -1,6 +1,7 @@
 package com.majestick.randomizer
 
 import android.content.Context
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -10,8 +11,12 @@ import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -35,7 +40,9 @@ data class AppTheme(
      */
     val backdrop: List<Color> = emptyList(),
     /** Soft radial wash laid over the gradient. A sun, a streetlight, a nebula. */
-    val glow: Color? = null
+    val glow: Color? = null,
+    /** Artistic themes carry artwork and their own sound set; plain ones do not. */
+    val artistic: Boolean = false
 )
 
 private fun dark(
@@ -143,7 +150,8 @@ object Themes {
                 Color(0xFF0E1A12),
                 Color(0xFF0A130D)
             ),
-            glow = Color(0x2E9BE07F)
+            glow = Color(0x2E9BE07F),
+            artistic = true
         ),
         AppTheme(
             "sea", "Sea",
@@ -155,7 +163,8 @@ object Themes {
                 Color(0xFF071E2C),
                 Color(0xFF04121A)
             ),
-            glow = Color(0x3356D4E8)
+            glow = Color(0x3356D4E8),
+            artistic = true
         ),
         AppTheme(
             "space", "Space",
@@ -167,7 +176,8 @@ object Themes {
                 Color(0xFF0C0919),
                 Color(0xFF05040C)
             ),
-            glow = Color(0x38A187E8)
+            glow = Color(0x38A187E8),
+            artistic = true
         ),
         AppTheme(
             "citynight", "Night City",
@@ -179,13 +189,56 @@ object Themes {
                 Color(0xFF150E1F),
                 Color(0xFF0D0A14)
             ),
-            glow = Color(0x33FF7BC8)
+            glow = Color(0x33FF7BC8),
+            artistic = true
+        ),
+        AppTheme(
+            "autumn", "Autumn",
+            dark(0xFF1A1009, 0xFF2A1A10, 0xFFF08A3C, 0xFF1A1009, 0xFFF5E7DA, 0xFFC0A28C, 0xFF4A3020, 0xFFD8C15C),
+            Color(0xFFF08A3C),
+            backdrop = listOf(
+                Color(0xFF5A2A12),
+                Color(0xFF3A1C0E),
+                Color(0xFF24140B),
+                Color(0xFF150C06)
+            ),
+            glow = Color(0x33F0A93C),
+            artistic = true
+        ),
+        AppTheme(
+            "aero", "Frutiger Aero",
+            dark(0xFF07202B, 0xFF0E3140, 0xFF5FE3C8, 0xFF042028, 0xFFE8F7FA, 0xFF93BDC6, 0xFF1B4A5C, 0xFFA8E063),
+            Color(0xFF5FE3C8),
+            backdrop = listOf(
+                Color(0xFF1E7FA8),
+                Color(0xFF116383),
+                Color(0xFF0A3F55),
+                Color(0xFF06202B)
+            ),
+            glow = Color(0x40A8E7F5),
+            artistic = true
+        ),
+        AppTheme(
+            "digital", "Digital",
+            dark(0xFF060A08, 0xFF0E1A14, 0xFF3DF08A, 0xFF041008, 0xFFDDF5E6, 0xFF89AD9A, 0xFF1C3A2A, 0xFF4CC9F0),
+            Color(0xFF3DF08A),
+            backdrop = listOf(
+                Color(0xFF0A2A1C),
+                Color(0xFF071C13),
+                Color(0xFF04110B),
+                Color(0xFF020705)
+            ),
+            glow = Color(0x2E3DF08A),
+            artistic = true
         )
     )
 
     const val DEFAULT_ID = "midnight"
 
     fun byId(id: String?): AppTheme = all.firstOrNull { it.id == id } ?: all.first()
+
+    val plain: List<AppTheme> get() = all.filterNot { it.artistic }
+    val artistic: List<AppTheme> get() = all.filter { it.artistic }
 }
 
 object ThemeStore {
@@ -249,21 +302,63 @@ private val AppTypography = Typography(
 
 @Composable
 fun RandomizerTheme(themeId: String, content: @Composable () -> Unit) {
-    val theme = Themes.byId(themeId)
     MaterialTheme(
-        colorScheme = theme.scheme,
-        typography = AppTypography
-    ) {
-        val stops = if (theme.backdrop.size >= 2) theme.backdrop
-        else listOf(theme.scheme.background, theme.scheme.background)
+        colorScheme = Themes.byId(themeId).scheme,
+        typography = AppTypography,
+        content = content
+    )
+}
 
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Brush.verticalGradient(stops))
-        ) {
-            // Every screen paints its own Scaffold transparently so this shows
-            // through. The wash sits above the gradient and below the content.
+/**
+ * Paints whatever sits behind the whole app: a gradient always, a radial wash
+ * when the theme has one, and a piece of artwork when a drawable exists for this
+ * theme and screen.
+ *
+ * Artwork is looked up by name rather than wired in by id, so dropping
+ * `art_sea_home.png` into res/drawable is the entire integration step. A missing
+ * file simply means no artwork, and each screen falls back to the theme's home
+ * image before giving up. Every screen paints its Scaffold transparently so this
+ * shows through.
+ */
+@Composable
+fun ThemeBackdrop(themeId: String, screen: String, content: @Composable () -> Unit) {
+    val theme = Themes.byId(themeId)
+    val context = LocalContext.current
+
+    val artId = remember(themeId, screen) {
+        artResource(context, "art_${theme.id}_$screen")
+            ?: artResource(context, "art_${theme.id}_home")
+    }
+
+    val stops = if (theme.backdrop.size >= 2) theme.backdrop
+    else listOf(theme.scheme.background, theme.scheme.background)
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Brush.verticalGradient(stops))
+    ) {
+        if (artId != null) {
+            Image(
+                painter = painterResource(artId),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+            // Artwork behind live text needs holding back or nothing is legible.
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(
+                                theme.scheme.background.copy(alpha = 0.62f),
+                                theme.scheme.background.copy(alpha = 0.82f)
+                            )
+                        )
+                    )
+            )
+        } else {
             theme.glow?.let { tint ->
                 Box(
                     modifier = Modifier
@@ -276,7 +371,13 @@ fun RandomizerTheme(themeId: String, content: @Composable () -> Unit) {
                         )
                 )
             }
-            content()
         }
+        content()
     }
+}
+
+@Suppress("DiscouragedApi")
+private fun artResource(context: android.content.Context, name: String): Int? {
+    val id = context.resources.getIdentifier(name, "drawable", context.packageName)
+    return if (id != 0) id else null
 }

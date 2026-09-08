@@ -330,13 +330,31 @@ fun ThemeBackdrop(themeId: String, screen: String, content: @Composable () -> Un
             ?: artResource(context, "art_${theme.id}_home")
     }
 
-    val stops = if (theme.backdrop.size >= 2) theme.backdrop
-    else listOf(theme.scheme.background, theme.scheme.background)
+    // These were being rebuilt on every recomposition, which for two full-screen
+    // brushes is real work on every frame that touches the theme.
+    val backdropBrush = remember(themeId) {
+        val stops = if (theme.backdrop.size >= 2) theme.backdrop
+        else listOf(theme.scheme.background, theme.scheme.background)
+        Brush.verticalGradient(stops)
+    }
+    val scrimBrush = remember(themeId) {
+        Brush.verticalGradient(
+            listOf(
+                theme.scheme.background.copy(alpha = 0.62f),
+                theme.scheme.background.copy(alpha = 0.82f)
+            )
+        )
+    }
+    val glowBrush = remember(themeId) {
+        theme.glow?.let { tint ->
+            Brush.radialGradient(colors = listOf(tint, Color.Transparent), radius = 900f)
+        }
+    }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Brush.verticalGradient(stops))
+            .background(backdropBrush)
     ) {
         if (artId != null) {
             Image(
@@ -349,26 +367,14 @@ fun ThemeBackdrop(themeId: String, screen: String, content: @Composable () -> Un
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(
-                                theme.scheme.background.copy(alpha = 0.62f),
-                                theme.scheme.background.copy(alpha = 0.82f)
-                            )
-                        )
-                    )
+                    .background(scrimBrush)
             )
         } else {
-            theme.glow?.let { tint ->
+            glowBrush?.let { brush ->
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(
-                            Brush.radialGradient(
-                                colors = listOf(tint, Color.Transparent),
-                                radius = 900f
-                            )
-                        )
+                        .background(brush)
                 )
             }
         }

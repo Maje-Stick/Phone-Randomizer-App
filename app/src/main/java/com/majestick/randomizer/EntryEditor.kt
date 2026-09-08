@@ -129,7 +129,7 @@ private fun WeightBar(
 
     fun commit() {
         val parsed = buffer.text.toDoubleOrNull()
-        DebugLog.trace("keypad", "weight commit buffer='${buffer.text}' parsed=$parsed")
+        DebugLog.trace("keypad") { "weight commit buffer='${buffer.text}' parsed=$parsed" }
         parsed?.let { callback(it.coerceIn(0.0, 9999.0)) }
         editing = false
         keyboard?.hide()
@@ -198,10 +198,7 @@ private fun WeightBar(
                         .fillMaxWidth()
                         .focusRequester(focusRequester)
                         .onFocusChanged { state ->
-                            DebugLog.trace(
-                                "keypad",
-                                "weight focus isFocused=${state.isFocused} hasFocus=${state.hasFocus} gainedBefore=$gainedFocus"
-                            )
+                            DebugLog.trace("keypad") { "weight focus isFocused=${state.isFocused} hasFocus=${state.hasFocus} gainedBefore=$gainedFocus" }
                             if (state.isFocused) {
                                 gainedFocus = true
                                 keyboard?.show()
@@ -211,10 +208,10 @@ private fun WeightBar(
                         }
                 )
                 LaunchedEffect(Unit) {
-                    DebugLog.trace("keypad", "weight field composed, controller=${if (keyboard == null) "NULL" else "ok"}")
+                    DebugLog.trace("keypad") { "weight field composed, controller=${if (keyboard == null) "NULL" else "ok"}" }
                     withFrameNanos { }
                     runCatching { focusRequester.requestFocus() }
-                        .onSuccess { DebugLog.trace("keypad", "weight requestFocus sent") }
+                        .onSuccess { DebugLog.trace("keypad") { "weight requestFocus sent" } }
                         .onFailure { DebugLog.log("keypad", "weight requestFocus FAILED: $it") }
                     keyboard?.show()
                 }
@@ -230,7 +227,7 @@ private fun WeightBar(
                         .fillMaxWidth()
                         .fillMaxHeight()
                         .clickable {
-                            DebugLog.trace("keypad", "weight tapped, value=${trimNumber(weight)} -> opening editor")
+                            DebugLog.trace("keypad") { "weight tapped, value=${trimNumber(weight)} -> opening editor" }
                             val start = trimNumber(weight)
                             buffer = TextFieldValue(start, TextRange(start.length))
                             gainedFocus = false
@@ -282,10 +279,8 @@ fun EntryListEditor(
     val emit: (((List<Entry>) -> List<Entry>) -> Unit) = { transform ->
         onChange { list ->
             val out = transform(list)
-            DebugLog.trace(
-                "entries",
-                "${list.size} rows -> ${out.size}, weights ["
-                    + out.joinToString(",") { trimNumber(it.weight) } + "]"
+            DebugLog.trace("entries") { "${list.size} rows -> ${out.size}, weights ["
+                    + out.joinToString("," } { trimNumber(it.weight) } + "]"
             )
             out
         }

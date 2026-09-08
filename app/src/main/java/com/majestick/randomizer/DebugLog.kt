@@ -32,7 +32,7 @@ object DebugLog {
 
     private const val CAPACITY = 2500
     private const val PREFS = "debug_log"
-    private const val KEY_VERBOSE = "verbose"
+    private const val KEY_VERBOSE = "verbose_v2"
     private const val REPORT_FILE = "last_report.txt"
     private const val STALL_MS = 3000L
     const val MARK_TAG = "MARK"
@@ -68,7 +68,8 @@ object DebugLog {
     var lastReport: String? = null
         private set
 
-    private var verboseField = true
+    @PublishedApi
+    internal var verboseField = false
 
     /**
      * Gesture and focus tracing. Loud on purpose -- a held button logs roughly
@@ -88,7 +89,7 @@ object DebugLog {
         val app = context.applicationContext
         appContext = app
         prefs = app.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        verboseField = prefs?.getBoolean(KEY_VERBOSE, true) ?: true
+        verboseField = prefs?.getBoolean(KEY_VERBOSE, false) ?: false
         loadReport()
         log("app", "process start")
         log("app", header().trim().replace("\n", " | "))
@@ -123,9 +124,14 @@ object DebugLog {
         return n
     }
 
-    /** High-frequency tracing. Silent unless [verbose] is on. */
-    fun trace(tag: String, message: String) {
-        if (verboseField) log(tag, message)
+    /**
+     * High-frequency tracing. The message is a lambda so that the string is
+     * never assembled when tracing is off -- with a held button firing fourteen
+     * times a second, building and discarding those strings was real work done
+     * for nothing.
+     */
+    inline fun trace(tag: String, message: () -> String) {
+        if (verbose) log(tag, message())
     }
 
     // ---------------------------------------------------------------- reading

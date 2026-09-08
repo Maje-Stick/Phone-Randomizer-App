@@ -235,7 +235,6 @@ private fun HomeScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier
                 .padding(padding)
-                .navigationBarsPadding()
                 .pointerInput(Unit) {
                     // detectDragGesturesAfterLongPress is the platform's own
                     // arbitration: it claims nothing until the long press has
@@ -283,7 +282,7 @@ private fun HomeScreen(
                                         haptics.performHapticFeedback(
                                             HapticFeedbackType.TextHandleMove
                                         )
-                                        DebugLog.trace("reorder", "$key $from -> $to")
+                                        DebugLog.trace("reorder") { "$key $from -> $to" }
                                     }
                                 }
                             }
@@ -491,7 +490,6 @@ private fun SettingsScreen(
             modifier = Modifier
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
-                .navigationBarsPadding()
                 .padding(horizontal = 20.dp)
         ) {
             Text(

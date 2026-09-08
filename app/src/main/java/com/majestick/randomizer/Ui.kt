@@ -172,17 +172,17 @@ private fun Modifier.tapOrHoldStep(
     val focus = LocalFocusManager.current
     val view = LocalView.current
 
-    LaunchedEffect(enabled) { DebugLog.trace("gesture", "$name enabled=$enabled") }
+    LaunchedEffect(enabled) { DebugLog.trace("gesture") { "$name enabled=$enabled" } }
     DisposableEffect(Unit) {
-        DebugLog.trace("gesture", "$name attached")
-        onDispose { DebugLog.trace("gesture", "$name disposed") }
+        DebugLog.trace("gesture") { "$name attached" }
+        onDispose { DebugLog.trace("gesture") { "$name disposed" } }
     }
 
     return this.pointerInput(Unit) {
         val slop = viewConfiguration.touchSlop
         awaitEachGesture {
             val down = awaitFirstDown(requireUnconsumed = false)
-            DebugLog.trace("gesture", "$name DOWN (enabled=$active, slop=${slop.toInt()}px)")
+            DebugLog.trace("gesture") { "$name DOWN (enabled=$active, slop=${slop.toInt()}px)" }
             // Dismisses an open number editor so the button acts on the
             // committed value instead of fighting the buffer.
             focus.clearFocus()
@@ -196,11 +196,11 @@ private fun Modifier.tapOrHoldStep(
                 delay(450)
                 if (travel > slop) return@launch
                 repeated = true
-                DebugLog.trace("gesture", "$name hold begins")
+                DebugLog.trace("gesture") { "$name hold begins" }
                 var n = 0
                 while (active) {
                     n++
-                    if (n <= 3 || n % 10 == 0) DebugLog.trace("gesture", "$name repeat #$n")
+                    if (n <= 3 || n % 10 == 0) DebugLog.trace("gesture") { "$name repeat #$n" }
                     step()
                     haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                     delay(70)
@@ -230,7 +230,7 @@ private fun Modifier.tapOrHoldStep(
                 }
             } finally {
                 holdJob.cancel()
-                DebugLog.trace("gesture", "$name END $outcome")
+                DebugLog.trace("gesture") { "$name END $outcome" }
             }
         }
     }
@@ -314,7 +314,7 @@ fun EditableNumber(
 
     fun commit() {
         val parsed = buffer.text.toIntOrNull()
-        DebugLog.trace("keypad", "number commit buffer='${buffer.text}' parsed=$parsed")
+        DebugLog.trace("keypad") { "number commit buffer='${buffer.text}' parsed=$parsed" }
         parsed?.let { callback(it.coerceIn(min, max)) }
         editing = false
         keyboard?.hide()
@@ -347,10 +347,7 @@ fun EditableNumber(
             modifier = modifier
                 .focusRequester(focusRequester)
                 .onFocusChanged { state ->
-                    DebugLog.trace(
-                        "keypad",
-                        "number focus isFocused=${state.isFocused} hasFocus=${state.hasFocus} gainedBefore=$gainedFocus"
-                    )
+                    DebugLog.trace("keypad") { "number focus isFocused=${state.isFocused} hasFocus=${state.hasFocus} gainedBefore=$gainedFocus" }
                     if (state.isFocused) {
                         gainedFocus = true
                         keyboard?.show()
@@ -360,10 +357,10 @@ fun EditableNumber(
                 }
         )
         LaunchedEffect(Unit) {
-            DebugLog.trace("keypad", "number field composed, controller=${if (keyboard == null) "NULL" else "ok"}")
+            DebugLog.trace("keypad") { "number field composed, controller=${if (keyboard == null) "NULL" else "ok"}" }
             withFrameNanos { }
             runCatching { focusRequester.requestFocus() }
-                .onSuccess { DebugLog.trace("keypad", "number requestFocus sent") }
+                .onSuccess { DebugLog.trace("keypad") { "number requestFocus sent" } }
                 .onFailure { DebugLog.log("keypad", "number requestFocus FAILED: $it") }
             keyboard?.show()
         }
@@ -374,7 +371,7 @@ fun EditableNumber(
             color = MaterialTheme.colorScheme.onSurface,
             textAlign = TextAlign.Center,
             modifier = modifier.clickable {
-                DebugLog.trace("keypad", "number tapped, value=$current -> opening editor")
+                DebugLog.trace("keypad") { "number tapped, value=$current -> opening editor" }
                 val start = current.toString()
                 // Caret at the end, not the start -- typing should extend the
                 // number the way it reads, not prepend to it.

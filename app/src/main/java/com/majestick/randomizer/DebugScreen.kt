@@ -136,7 +136,6 @@ fun DebugScreen(onBack: () -> Unit) {
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .navigationBarsPadding()
                 .padding(horizontal = 16.dp)
         ) {
             Text(

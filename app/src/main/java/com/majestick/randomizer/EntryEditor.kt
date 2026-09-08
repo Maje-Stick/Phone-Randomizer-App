@@ -39,6 +39,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -110,10 +111,12 @@ private fun WeightBar(
     weight: Double,
     onNudge: (Int) -> Unit,
     onSetWeight: (Double) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    barName: String = "weight"
 ) {
     var editing by remember { mutableStateOf(false) }
     var buffer by remember { mutableStateOf("") }
+    var gainedFocus by remember { mutableStateOf(false) }
     val focusRequester = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
     val nudge by rememberUpdatedState(onNudge)
@@ -121,7 +124,9 @@ private fun WeightBar(
     val shape = RoundedCornerShape(10.dp)
 
     fun commit() {
-        buffer.toDoubleOrNull()?.let { callback(it.coerceIn(0.0, 9999.0)) }
+        val parsed = buffer.toDoubleOrNull()
+        DebugLog.trace("keypad", "weight commit buffer='$buffer' parsed=$parsed")
+        parsed?.let { callback(it.coerceIn(0.0, 9999.0)) }
         editing = false
     }
 
@@ -142,7 +147,8 @@ private fun WeightBar(
             onStep = { nudge(-1) },
             modifier = Modifier
                 .width(24.dp)
-                .fillMaxHeight()
+                .fillMaxHeight(),
+            name = "$barName minus"
         ) {
             Icon(
                 Icons.Filled.Remove,
@@ -179,10 +185,25 @@ private fun WeightBar(
                     modifier = Modifier
                         .fillMaxWidth()
                         .focusRequester(focusRequester)
-                        .onFocusChanged { if (!it.isFocused) commit() }
+                        .onFocusChanged { state ->
+                            DebugLog.trace(
+                                "keypad",
+                                "weight focus isFocused=${state.isFocused} hasFocus=${state.hasFocus} gainedBefore=$gainedFocus"
+                            )
+                            if (state.isFocused) {
+                                gainedFocus = true
+                                keyboard?.show()
+                            } else if (gainedFocus && editing) {
+                                commit()
+                            }
+                        }
                 )
                 LaunchedEffect(Unit) {
-                    focusRequester.requestFocus()
+                    DebugLog.trace("keypad", "weight field composed, controller=${if (keyboard == null) "NULL" else "ok"}")
+                    withFrameNanos { }
+                    runCatching { focusRequester.requestFocus() }
+                        .onSuccess { DebugLog.trace("keypad", "weight requestFocus sent") }
+                        .onFailure { DebugLog.log("keypad", "weight requestFocus FAILED: $it") }
                     keyboard?.show()
                 }
             } else {
@@ -197,7 +218,9 @@ private fun WeightBar(
                         .fillMaxWidth()
                         .fillMaxHeight()
                         .clickable {
+                            DebugLog.trace("keypad", "weight tapped, value=${trimNumber(weight)} -> opening editor")
                             buffer = trimNumber(weight)
+                            gainedFocus = false
                             editing = true
                         }
                         .padding(top = 11.dp)
@@ -210,7 +233,8 @@ private fun WeightBar(
             onStep = { nudge(1) },
             modifier = Modifier
                 .width(24.dp)
-                .fillMaxHeight()
+                .fillMaxHeight(),
+            name = "$barName plus"
         ) {
             Icon(
                 Icons.Filled.Add,
@@ -239,6 +263,20 @@ fun EntryListEditor(
 ) {
     var showText by remember { mutableStateOf(false) }
     var draftText by remember { mutableStateOf("") }
+
+    // Every mutation of the list, with the weights that came out. This is what
+    // makes an increment-then-revert visible as two entries instead of one.
+    val emit: (((List<Entry>) -> List<Entry>) -> Unit) = { transform ->
+        onChange { list ->
+            val out = transform(list)
+            DebugLog.trace(
+                "entries",
+                "${list.size} rows -> ${out.size}, weights ["
+                    + out.joinToString(",") { trimNumber(it.weight) } + "]"
+            )
+            out
+        }
+    }
 
     Column(Modifier.fillMaxWidth()) {
         Row(
@@ -270,16 +308,17 @@ fun EntryListEditor(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 WeightBar(
+                    barName = "weight[$index]",
                     weight = entry.weight,
                     onNudge = { step ->
-                        onChange { list ->
+                        emit { list ->
                             list.updateAt(index) {
                                 it.copy(weight = (it.weight + step).coerceIn(0.0, 9999.0))
                             }
                         }
                     },
                     onSetWeight = { value ->
-                        onChange { list -> list.updateAt(index) { it.copy(weight = value) } }
+                        emit { list -> list.updateAt(index) { it.copy(weight = value) } }
                     },
                     modifier = Modifier.width(WEIGHT_BAR_WIDTH)
                 )
@@ -287,13 +326,13 @@ fun EntryListEditor(
                 CompactField(
                     value = entry.text,
                     onValueChange = { text ->
-                        onChange { list -> list.updateAt(index) { it.copy(text = text) } }
+                        emit { list -> list.updateAt(index) { it.copy(text = text) } }
                     },
                     placeholder = "Entry ${index + 1}",
                     modifier = Modifier.weight(1f)
                 )
                 IconButton(
-                    onClick = { onChange { list -> list.filterIndexed { i, _ -> i != index } } },
+                    onClick = { emit { list -> list.filterIndexed { i, _ -> i != index } } },
                     modifier = Modifier.size(38.dp)
                 ) {
                     Icon(
@@ -309,7 +348,7 @@ fun EntryListEditor(
         Spacer(Modifier.height(4.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(
-                onClick = { onChange { list -> list + Entry("") } },
+                onClick = { emit { list -> list + Entry("") } },
                 shape = RoundedCornerShape(10.dp),
                 modifier = Modifier.weight(1f)
             ) {
@@ -362,7 +401,7 @@ fun EntryListEditor(
             },
             confirmButton = {
                 TextButton(onClick = {
-                    onChange { previous -> mergeFromText(draftText, previous) }
+                    emit { previous -> mergeFromText(draftText, previous) }
                     showText = false
                 }) { Text("Apply") }
             },

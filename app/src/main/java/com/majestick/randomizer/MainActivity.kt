@@ -18,6 +18,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -29,6 +31,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.Check
@@ -51,19 +54,24 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.flow.distinctUntilChanged
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        DebugLog.install(this)
         enableEdgeToEdge()
         setContent {
             val context = LocalContext.current
@@ -110,15 +118,31 @@ private val TOOLS = listOf(
 fun App(themeId: String, onThemeChange: (String) -> Unit) {
     var openTool by rememberSaveable { mutableStateOf<String?>(null) }
 
+    LaunchedEffect(openTool) {
+        DebugLog.log("nav", "screen = ${openTool ?: "home"}")
+    }
+
+    // Whether the soft keyboard actually rose is otherwise invisible from inside
+    // the app, and it is the whole question for the keypad bug.
+    val density = LocalDensity.current
+    val imeInsets = WindowInsets.ime
+    LaunchedEffect(Unit) {
+        snapshotFlow { imeInsets.getBottom(density) }
+            .distinctUntilChanged()
+            .collect { DebugLog.log("ime", if (it > 0) "keyboard visible, height ${it}px" else "keyboard hidden") }
+    }
+
     BackHandler(enabled = openTool != null) { openTool = null }
 
     val back = { openTool = null }
     when (openTool) {
         null -> HomeScreen(
             onOpen = { openTool = it },
-            onSettings = { openTool = "settings" }
+            onSettings = { openTool = "settings" },
+            onDebug = { openTool = "debug" }
         )
         "settings" -> SettingsScreen(themeId, onThemeChange, back)
+        "debug" -> DebugScreen(back)
         "coin" -> CoinScreen(back)
         "dice" -> DiceScreen(back)
         "number" -> NumberScreen(back)
@@ -131,13 +155,18 @@ fun App(themeId: String, onThemeChange: (String) -> Unit) {
         "distribution" -> DistributionScreen(back)
         else -> HomeScreen(
             onOpen = { openTool = it },
-            onSettings = { openTool = "settings" }
+            onSettings = { openTool = "settings" },
+            onDebug = { openTool = "debug" }
         )
     }
 }
 
 @Composable
-private fun HomeScreen(onOpen: (String) -> Unit, onSettings: () -> Unit) {
+private fun HomeScreen(
+    onOpen: (String) -> Unit,
+    onSettings: () -> Unit,
+    onDebug: () -> Unit
+) {
     Scaffold(containerColor = MaterialTheme.colorScheme.background) { padding ->
         LazyVerticalGrid(
             columns = GridCells.Fixed(2),
@@ -166,6 +195,13 @@ private fun HomeScreen(onOpen: (String) -> Unit, onSettings: () -> Unit) {
                             "${TOOLS.size} ways to stop deciding.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    IconButton(onClick = onDebug) {
+                        Icon(
+                            Icons.Filled.BugReport,
+                            contentDescription = "Debug log",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                     IconButton(onClick = onSettings) {
@@ -264,7 +300,10 @@ private fun SettingsScreen(
                             else MaterialTheme.colorScheme.outline,
                             RoundedCornerShape(14.dp)
                         )
-                        .clickable { onThemeChange(theme.id) }
+                        .clickable {
+                            DebugLog.log("settings", "theme -> ${theme.id}")
+                            onThemeChange(theme.id)
+                        }
                         .padding(horizontal = 16.dp, vertical = 14.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {

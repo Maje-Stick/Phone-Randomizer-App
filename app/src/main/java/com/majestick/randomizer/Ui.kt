@@ -42,6 +42,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -49,6 +50,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -99,6 +101,7 @@ fun ToolScaffold(
         bottomBar = {
             Button(
                 onClick = {
+                    DebugLog.log("action", "$title -> $actionLabel")
                     haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                     onAction()
                 },
@@ -139,28 +142,47 @@ fun RepeatPressBox(
     enabled: Boolean,
     onStep: () -> Unit,
     modifier: Modifier = Modifier,
+    name: String = "press",
     content: @Composable BoxScope.() -> Unit
 ) {
     val scope = rememberCoroutineScope()
     val step by rememberUpdatedState(onStep)
+    val active by rememberUpdatedState(enabled)
     val haptics = LocalHapticFeedback.current
 
+    LaunchedEffect(enabled) { DebugLog.trace("gesture", "$name enabled=$enabled") }
+    DisposableEffect(Unit) {
+        DebugLog.trace("gesture", "$name attached")
+        onDispose { DebugLog.trace("gesture", "$name disposed") }
+    }
+
     Box(
-        modifier = modifier.pointerInput(enabled) {
-            if (!enabled) return@pointerInput
+        modifier = modifier.pointerInput(Unit) {
             detectTapGestures(
                 onPress = {
-                    step()
-                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    val job = scope.launch {
-                        delay(450)
-                        while (true) {
-                            step()
-                            delay(70)
+                    DebugLog.trace("gesture", "$name DOWN (enabled=$active)")
+                    if (active) {
+                        step()
+                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        val job = scope.launch {
+                            delay(450)
+                            var n = 0
+                            while (active) {
+                                n++
+                                DebugLog.trace("gesture", "$name repeat #$n")
+                                step()
+                                delay(70)
+                            }
+                            DebugLog.trace("gesture", "$name repeat loop ended after $n (enabled went false)")
+                        }
+                        try {
+                            val released = tryAwaitRelease()
+                            DebugLog.trace("gesture", "$name UP released=$released")
+                        } finally {
+                            DebugLog.trace("gesture", "$name cancelling repeat job (wasActive=${job.isActive})")
+                            job.cancel()
                         }
                     }
-                    tryAwaitRelease()
-                    job.cancel()
                 }
             )
         },
@@ -183,7 +205,14 @@ fun RepeatIconButton(
 ) {
     val scope = rememberCoroutineScope()
     val step by rememberUpdatedState(onStep)
+    val active by rememberUpdatedState(enabled)
     val haptics = LocalHapticFeedback.current
+
+    LaunchedEffect(enabled) { DebugLog.trace("gesture", "$description enabled=$enabled") }
+    DisposableEffect(Unit) {
+        DebugLog.trace("gesture", "$description attached")
+        onDispose { DebugLog.trace("gesture", "$description disposed") }
+    }
 
     Box(
         modifier = Modifier
@@ -199,21 +228,32 @@ fun RepeatIconButton(
                 else MaterialTheme.colorScheme.background,
                 CircleShape
             )
-            .pointerInput(enabled) {
-                if (!enabled) return@pointerInput
+            .pointerInput(Unit) {
                 detectTapGestures(
                     onPress = {
-                        step()
-                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        val job = scope.launch {
-                            delay(450)
-                            while (true) {
-                                step()
-                                delay(70)
+                        DebugLog.trace("gesture", "$description DOWN (enabled=$active)")
+                        if (active) {
+                            step()
+                            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            val job = scope.launch {
+                                delay(450)
+                                var n = 0
+                                while (active) {
+                                    n++
+                                    DebugLog.trace("gesture", "$description repeat #$n")
+                                    step()
+                                    delay(70)
+                                }
+                                DebugLog.trace("gesture", "$description repeat loop ended after $n (enabled went false)")
+                            }
+                            try {
+                                val released = tryAwaitRelease()
+                                DebugLog.trace("gesture", "$description UP released=$released")
+                            } finally {
+                                DebugLog.trace("gesture", "$description cancelling repeat job (wasActive=${job.isActive})")
+                                job.cancel()
                             }
                         }
-                        tryAwaitRelease()
-                        job.cancel()
                     }
                 )
             },
@@ -246,6 +286,7 @@ fun EditableNumber(
 ) {
     var editing by remember { mutableStateOf(false) }
     var buffer by remember { mutableStateOf("") }
+    var gainedFocus by remember { mutableStateOf(false) }
     val focusRequester = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
 
@@ -253,7 +294,9 @@ fun EditableNumber(
     val callback by rememberUpdatedState(onValueChange)
 
     fun commit() {
-        buffer.toIntOrNull()?.let { callback(it.coerceIn(min, max)) }
+        val parsed = buffer.toIntOrNull()
+        DebugLog.trace("keypad", "number commit buffer='$buffer' parsed=$parsed")
+        parsed?.let { callback(it.coerceIn(min, max)) }
         editing = false
     }
 
@@ -276,10 +319,25 @@ fun EditableNumber(
             keyboardActions = KeyboardActions(onDone = { commit() }),
             modifier = modifier
                 .focusRequester(focusRequester)
-                .onFocusChanged { if (!it.isFocused && editing) commit() }
+                .onFocusChanged { state ->
+                    DebugLog.trace(
+                        "keypad",
+                        "number focus isFocused=${state.isFocused} hasFocus=${state.hasFocus} gainedBefore=$gainedFocus"
+                    )
+                    if (state.isFocused) {
+                        gainedFocus = true
+                        keyboard?.show()
+                    } else if (gainedFocus && editing) {
+                        commit()
+                    }
+                }
         )
         LaunchedEffect(Unit) {
-            focusRequester.requestFocus()
+            DebugLog.trace("keypad", "number field composed, controller=${if (keyboard == null) "NULL" else "ok"}")
+            withFrameNanos { }
+            runCatching { focusRequester.requestFocus() }
+                .onSuccess { DebugLog.trace("keypad", "number requestFocus sent") }
+                .onFailure { DebugLog.log("keypad", "number requestFocus FAILED: $it") }
             keyboard?.show()
         }
     } else {
@@ -289,7 +347,9 @@ fun EditableNumber(
             color = MaterialTheme.colorScheme.onSurface,
             textAlign = TextAlign.Center,
             modifier = modifier.clickable {
+                DebugLog.trace("keypad", "number tapped, value=$current -> opening editor")
                 buffer = current.toString()
+                gainedFocus = false
                 editing = true
             }
         )

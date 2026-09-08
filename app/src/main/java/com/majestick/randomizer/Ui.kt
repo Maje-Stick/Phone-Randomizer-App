@@ -3,7 +3,8 @@ package com.majestick.randomizer
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -73,6 +74,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlin.math.max
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -139,17 +141,27 @@ fun ToolScaffold(
 }
 
 /**
- * Press-and-hold behaviour with no styling of its own, so callers can shape it.
- * Used for the flat segments at each end of a weight bar.
+ * Tap-to-step and hold-to-repeat, for a button living inside a vertical scroll.
+ *
+ * The rule is the one the platform uses everywhere: a touch is a tap only if the
+ * finger lifts without travelling past the touch slop. So this measures the
+ * finger's own movement rather than asking whether the gesture "completed".
+ *
+ * That matters because `tryAwaitRelease()` reported *every* press as cancelled
+ * here, real taps included -- these targets are 24dp wide and the smallest roll
+ * of a fingertip leaves their bounds. Firing on touch-down was the workaround,
+ * and it is what made an attempted scroll increment whatever it started on.
+ *
+ * Nothing is consumed, so the parent scroll arbitrates as it normally would.
+ * Past attempts at custom gestures here failed by trying to *win* that
+ * arbitration; this one declines to enter it.
  */
 @Composable
-fun RepeatPressBox(
+private fun Modifier.tapOrHoldStep(
+    name: String,
     enabled: Boolean,
-    onStep: () -> Unit,
-    modifier: Modifier = Modifier,
-    name: String = "press",
-    content: @Composable BoxScope.() -> Unit
-) {
+    onStep: () -> Unit
+): Modifier {
     val scope = rememberCoroutineScope()
     val step by rememberUpdatedState(onStep)
     val active by rememberUpdatedState(enabled)
@@ -162,48 +174,84 @@ fun RepeatPressBox(
         onDispose { DebugLog.trace("gesture", "$name disposed") }
     }
 
-    Box(
-        modifier = modifier.pointerInput(Unit) {
-            detectTapGestures(
-                onPress = {
-                    DebugLog.trace("gesture", "$name DOWN (enabled=$active)")
-                    // Commits and dismisses any open number editor first, so the
-                    // button acts on the committed value instead of fighting it.
-                    focus.clearFocus()
-                    if (active) {
-                        step()
-                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        val job = scope.launch {
-                            delay(450)
-                            var n = 0
-                            while (active) {
-                                n++
-                                if (n <= 3 || n % 10 == 0) {
-                                    DebugLog.trace("gesture", "$name repeat #$n")
-                                }
-                                step()
-                                delay(70)
-                            }
-                            DebugLog.trace("gesture", "$name repeat loop ended after $n (enabled went false)")
+    return this.pointerInput(Unit) {
+        val slop = viewConfiguration.touchSlop
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false)
+            DebugLog.trace("gesture", "$name DOWN (enabled=$active, slop=${slop.toInt()}px)")
+            // Dismisses an open number editor so the button acts on the
+            // committed value instead of fighting the buffer.
+            focus.clearFocus()
+            if (!active) return@awaitEachGesture
+
+            var travel = 0f
+            var repeated = false
+            var outcome = "lost"
+
+            val holdJob = scope.launch {
+                delay(450)
+                if (travel > slop) return@launch
+                repeated = true
+                DebugLog.trace("gesture", "$name hold begins")
+                var n = 0
+                while (active) {
+                    n++
+                    if (n <= 3 || n % 10 == 0) DebugLog.trace("gesture", "$name repeat #$n")
+                    step()
+                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    delay(70)
+                }
+            }
+
+            try {
+                while (true) {
+                    val change = awaitPointerEvent().changes
+                        .firstOrNull { it.id == down.id } ?: break
+                    travel = max(travel, (change.position - down.position).getDistance())
+                    if (travel > slop && !repeated) {
+                        outcome = "scrolled away at ${travel.toInt()}px"
+                        break
+                    }
+                    if (!change.pressed) {
+                        if (repeated) {
+                            outcome = "released after holding"
+                        } else {
+                            outcome = "TAP at ${travel.toInt()}px"
+                            step()
+                            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         }
-                        try {
-                            val released = tryAwaitRelease()
-                            DebugLog.trace("gesture", "$name UP released=$released")
-                        } finally {
-                            DebugLog.trace("gesture", "$name cancelling repeat job (wasActive=${job.isActive})")
-                            job.cancel()
-                        }
+                        break
                     }
                 }
-            )
-        },
+            } finally {
+                holdJob.cancel()
+                DebugLog.trace("gesture", "$name END $outcome")
+            }
+        }
+    }
+}
+
+/**
+ * Press-and-hold behaviour with no styling of its own, so callers can shape it.
+ * Used for the flat segments at each end of a weight bar.
+ */
+@Composable
+fun RepeatPressBox(
+    enabled: Boolean,
+    onStep: () -> Unit,
+    modifier: Modifier = Modifier,
+    name: String = "press",
+    content: @Composable BoxScope.() -> Unit
+) {
+    Box(
+        modifier = modifier.tapOrHoldStep(name, enabled, onStep),
         contentAlignment = Alignment.Center,
         content = content
     )
 }
 
 /**
- * Fires once on press, then repeats while held. Holding twenty taps' worth of
+ * Steps once on a tap, then repeats while held. Holding twenty taps' worth of
  * increments is the whole point -- tapping fifty times is not a UI.
  */
 @Composable
@@ -214,18 +262,6 @@ fun RepeatIconButton(
     diameter: Dp = 40.dp,
     onStep: () -> Unit
 ) {
-    val scope = rememberCoroutineScope()
-    val step by rememberUpdatedState(onStep)
-    val active by rememberUpdatedState(enabled)
-    val haptics = LocalHapticFeedback.current
-    val focus = LocalFocusManager.current
-
-    LaunchedEffect(enabled) { DebugLog.trace("gesture", "$description enabled=$enabled") }
-    DisposableEffect(Unit) {
-        DebugLog.trace("gesture", "$description attached")
-        onDispose { DebugLog.trace("gesture", "$description disposed") }
-    }
-
     Box(
         modifier = Modifier
             .size(diameter)
@@ -240,38 +276,7 @@ fun RepeatIconButton(
                 else MaterialTheme.colorScheme.background,
                 CircleShape
             )
-            .pointerInput(Unit) {
-                detectTapGestures(
-                    onPress = {
-                        DebugLog.trace("gesture", "$description DOWN (enabled=$active)")
-                        focus.clearFocus()
-                        if (active) {
-                            step()
-                            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            val job = scope.launch {
-                                delay(450)
-                                var n = 0
-                                while (active) {
-                                    n++
-                                    if (n <= 3 || n % 10 == 0) {
-                                        DebugLog.trace("gesture", "$description repeat #$n")
-                                    }
-                                    step()
-                                    delay(70)
-                                }
-                                DebugLog.trace("gesture", "$description repeat loop ended after $n (enabled went false)")
-                            }
-                            try {
-                                val released = tryAwaitRelease()
-                                DebugLog.trace("gesture", "$description UP released=$released")
-                            } finally {
-                                DebugLog.trace("gesture", "$description cancelling repeat job (wasActive=${job.isActive})")
-                                job.cancel()
-                            }
-                        }
-                    }
-                )
-            },
+            .tapOrHoldStep(description, enabled, onStep),
         contentAlignment = Alignment.Center
     ) {
         Icon(
@@ -284,13 +289,6 @@ fun RepeatIconButton(
     }
 }
 
-/**
- * Shows a number. Tap it to type an exact value on the keypad.
- *
- * Deliberately a plain `clickable` rather than a custom gesture: this sits
- * inside a vertically scrolling column, and hand-rolled pointer handling here
- * kept losing the tap to the scroll container.
- */
 @Composable
 fun EditableNumber(
     value: Int,

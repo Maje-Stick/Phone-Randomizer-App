@@ -7,3 +7,9 @@ captures/
 .externalNativeBuild/
 .cxx/
 *.apk
+
+# Signing material never belongs in the repository.
+*.p12
+*.jks
+*.keystore
+keystore.properties

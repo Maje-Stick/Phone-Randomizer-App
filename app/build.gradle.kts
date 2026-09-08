@@ -12,28 +12,34 @@ android {
         applicationId = "com.majestick.randomizer"
         minSdk = 26
         targetSdk = 35
-        versionCode = 18
-        versionName = "2.6.1"
+        versionCode = 19
+        versionName = "2.7"
     }
 
+    // The signing key is supplied by the environment, never by the repository.
+    // CI decodes it from a secret into a temp file and points these at it. A
+    // local build with nothing set falls back to the throwaway debug key, which
+    // still builds and installs -- it just will not update over a CI build.
+    val signingStore: String? = System.getenv("SIGNING_KEYSTORE_PATH")
+
     signingConfigs {
-        create("shared") {
-            // Committed on purpose: keeps every CI build signed with the same key
-            // so updates install over the top instead of demanding an uninstall.
-            storeFile = file("../keystore/randomizer.p12")
-            storePassword = "randomizer"
-            keyAlias = "randomizer"
-            keyPassword = "randomizer"
-            storeType = "PKCS12"
+        if (signingStore != null && file(signingStore).exists()) {
+            create("release") {
+                storeFile = file(signingStore)
+                storePassword = System.getenv("SIGNING_STORE_PASSWORD")
+                keyAlias = System.getenv("SIGNING_KEY_ALIAS")
+                keyPassword = System.getenv("SIGNING_KEY_PASSWORD")
+                storeType = "PKCS12"
+            }
         }
     }
 
     buildTypes {
         debug {
-            signingConfig = signingConfigs.getByName("shared")
+            signingConfigs.findByName("release")?.let { signingConfig = it }
         }
         release {
-            signingConfig = signingConfigs.getByName("shared")
+            signingConfigs.findByName("release")?.let { signingConfig = it }
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

@@ -167,7 +167,8 @@ fun ListScreen(onBack: () -> Unit) {
             }
         )
         SectionSpacer()
-        EntryListEditor(entries) { entries = it }
+        // Transform-based so held +/- always applies to the live list.
+        EntryListEditor(entries) { transform -> entries = transform(entries) }
         Spacer(Modifier.height(14.dp))
         Stepper("How many to draw", count, { count = it }, min = 1, max = 200)
         ToggleRow("Allow repeats", repeats) { repeats = it }

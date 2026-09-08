@@ -59,6 +59,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -246,6 +247,7 @@ fun EditableNumber(
     var editing by remember { mutableStateOf(false) }
     var buffer by remember { mutableStateOf("") }
     val focusRequester = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
 
     val current by rememberUpdatedState(value)
     val callback by rememberUpdatedState(onValueChange)
@@ -276,7 +278,10 @@ fun EditableNumber(
                 .focusRequester(focusRequester)
                 .onFocusChanged { if (!it.isFocused && editing) commit() }
         )
-        LaunchedEffect(Unit) { focusRequester.requestFocus() }
+        LaunchedEffect(Unit) {
+            focusRequester.requestFocus()
+            keyboard?.show()
+        }
     } else {
         Text(
             value.toString(),

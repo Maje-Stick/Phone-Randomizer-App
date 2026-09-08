@@ -54,6 +54,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -90,7 +91,7 @@ fun ToolScaffold(
     val haptics = LocalHapticFeedback.current
     val focusManager = LocalFocusManager.current
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
+        containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
                 title = { Text(title, style = MaterialTheme.typography.titleMedium) },
@@ -100,7 +101,7 @@ fun ToolScaffold(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
+                    containerColor = Color.Transparent
                 )
             )
         },
@@ -109,6 +110,7 @@ fun ToolScaffold(
                 onClick = {
                     DebugLog.log("action", "$title -> $actionLabel")
                     focusManager.clearFocus()
+                    Sounds.draw()
                     haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                     onAction()
                 },

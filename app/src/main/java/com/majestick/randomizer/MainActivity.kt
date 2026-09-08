@@ -35,6 +35,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Casino
@@ -51,6 +52,7 @@ import androidx.compose.material.icons.filled.Style
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -68,6 +70,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -75,6 +78,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
@@ -84,6 +88,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         DebugLog.install(this)
+        Sounds.init(this)
         enableEdgeToEdge()
         setContent {
             val context = LocalContext.current
@@ -150,8 +155,10 @@ fun App(themeId: String, onThemeChange: (String) -> Unit) {
     when (openTool) {
         null -> HomeScreen(
             onOpen = { openTool = it },
-            onSettings = { openTool = "settings" }
+            onSettings = { openTool = "settings" },
+            onHelp = { openTool = "help" }
         )
+        "help" -> HelpScreen(back)
         "settings" -> SettingsScreen(
             themeId = themeId,
             onThemeChange = onThemeChange,
@@ -171,7 +178,8 @@ fun App(themeId: String, onThemeChange: (String) -> Unit) {
         "distribution" -> DistributionScreen(back)
         else -> HomeScreen(
             onOpen = { openTool = it },
-            onSettings = { openTool = "settings" }
+            onSettings = { openTool = "settings" },
+            onHelp = { openTool = "help" }
         )
     }
 }
@@ -186,10 +194,12 @@ private fun LazyGridItemInfo.holds(point: Offset): Boolean =
 @Composable
 private fun HomeScreen(
     onOpen: (String) -> Unit,
-    onSettings: () -> Unit
+    onSettings: () -> Unit,
+    onHelp: () -> Unit
 ) {
     val context = LocalContext.current
     val haptics = LocalHapticFeedback.current
+    val view = LocalView.current
     val gridState = rememberLazyGridState()
 
     val defaults = remember { TOOLS.map { it.id } }
@@ -201,7 +211,7 @@ private fun HomeScreen(
         order.mapNotNull { id -> TOOLS.firstOrNull { it.id == id } }
     }
 
-    Scaffold(containerColor = MaterialTheme.colorScheme.background) { padding ->
+    Scaffold(containerColor = Color.Transparent) { padding ->
         LazyVerticalGrid(
             state = gridState,
             columns = GridCells.Fixed(2),
@@ -309,6 +319,13 @@ private fun HomeScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+                    IconButton(onClick = onHelp) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.HelpOutline,
+                            contentDescription = "How it works",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                     IconButton(onClick = onSettings) {
                         Icon(
                             Icons.Filled.Settings,
@@ -336,7 +353,10 @@ private fun HomeScreen(
                                 clip = false
                             } else Modifier.animateItem()
                         )
-                ) { onOpen(tool.id) }
+                ) {
+                    Sounds.click(view)
+                    onOpen(tool.id)
+                }
             }
         }
     }
@@ -387,8 +407,9 @@ private fun SettingsScreen(
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
+    var soundsOn by remember { mutableStateOf(Sounds.enabled) }
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
+        containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
                 title = { Text("Settings", style = MaterialTheme.typography.titleMedium) },
@@ -398,7 +419,7 @@ private fun SettingsScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
+                    containerColor = Color.Transparent
                 )
             )
         }
@@ -463,6 +484,47 @@ private fun SettingsScreen(
                     }
                 }
             }
+            Spacer(Modifier.height(24.dp))
+            Text(
+                "Sound",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(10.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        MaterialTheme.colorScheme.surfaceVariant,
+                        RoundedCornerShape(12.dp)
+                    )
+                    .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(12.dp))
+                    .clickable {
+                        soundsOn = !soundsOn
+                        Sounds.enabled = soundsOn
+                    }
+                    .padding(horizontal = 14.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "Interface sounds",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        "Taps follow your system sound setting. The draw button "
+                            + "has its own chime.",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(checked = soundsOn, onCheckedChange = {
+                    soundsOn = it
+                    Sounds.enabled = it
+                })
+            }
+
             Spacer(Modifier.height(24.dp))
             Text(
                 "Home grid",

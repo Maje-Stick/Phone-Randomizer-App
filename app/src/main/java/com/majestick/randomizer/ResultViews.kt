@@ -1,5 +1,11 @@
 package com.majestick.randomizer
 
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import kotlinx.coroutines.delay
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -20,6 +26,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -30,6 +37,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -48,6 +56,14 @@ fun ResultFrame(
     content: @Composable BoxScope.() -> Unit
 ) {
     val clipboard = LocalClipboardManager.current
+    val view = LocalView.current
+    var copied by remember { mutableStateOf(false) }
+    LaunchedEffect(copied) {
+        if (copied) {
+            delay(1400)
+            copied = false
+        }
+    }
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -60,14 +76,30 @@ fun ResultFrame(
             content()
             if (!copyText.isNullOrBlank()) {
                 IconButton(
-                    onClick = { clipboard.setText(AnnotatedString(copyText)) },
+                    onClick = {
+                        clipboard.setText(AnnotatedString(copyText))
+                        Sounds.click(view)
+                        copied = true
+                        DebugLog.log("copy", "result copied, ${copyText.length} chars")
+                    },
                     modifier = Modifier.align(Alignment.TopEnd)
                 ) {
                     Icon(
-                        Icons.Filled.ContentCopy,
-                        contentDescription = "Copy result",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        if (copied) Icons.Filled.Check else Icons.Filled.ContentCopy,
+                        contentDescription = if (copied) "Copied" else "Copy result",
+                        tint = if (copied) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(20.dp)
+                    )
+                }
+                if (copied) {
+                    Text(
+                        "Copied",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(end = 4.dp, bottom = 2.dp)
                     )
                 }
             }

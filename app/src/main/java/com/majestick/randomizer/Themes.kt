@@ -1,12 +1,17 @@
 package com.majestick.randomizer
 
 import android.content.Context
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -21,7 +26,16 @@ data class AppTheme(
     val id: String,
     val label: String,
     val scheme: ColorScheme,
-    val swatch: Color
+    val swatch: Color,
+    /**
+     * Vertical gradient painted behind everything. Empty means a flat fill of
+     * the scheme background, which is what the plain palettes want. The scenic
+     * themes stack three or four stops to suggest depth -- a horizon, a canopy,
+     * a skyline glow -- without shipping a single bitmap.
+     */
+    val backdrop: List<Color> = emptyList(),
+    /** Soft radial wash laid over the gradient. A sun, a streetlight, a nebula. */
+    val glow: Color? = null
 )
 
 private fun dark(
@@ -115,6 +129,57 @@ object Themes {
             "daylight", "Daylight",
             light(0xFFF6F9FC, 0xFFE4ECF4, 0xFF0B6E99, 0xFF10202B, 0xFF4C606E, 0xFFBACBD8, 0xFFC2410C),
             Color(0xFF0B6E99)
+        ),
+
+        // --- scenic ---
+
+        AppTheme(
+            "nature", "Nature",
+            dark(0xFF0E1A12, 0xFF17281B, 0xFF9BE07F, 0xFF0B160F, 0xFFE9F1E5, 0xFF9CB09B, 0xFF2C4433, 0xFFE0B15C),
+            Color(0xFF9BE07F),
+            backdrop = listOf(
+                Color(0xFF1B3A24),
+                Color(0xFF13291A),
+                Color(0xFF0E1A12),
+                Color(0xFF0A130D)
+            ),
+            glow = Color(0x2E9BE07F)
+        ),
+        AppTheme(
+            "sea", "Sea",
+            dark(0xFF061620, 0xFF0F2634, 0xFF56D4E8, 0xFF04121A, 0xFFE0F0F6, 0xFF8FAFBE, 0xFF1E4155, 0xFFF4C25F),
+            Color(0xFF56D4E8),
+            backdrop = listOf(
+                Color(0xFF0E4258),
+                Color(0xFF0A2E40),
+                Color(0xFF071E2C),
+                Color(0xFF04121A)
+            ),
+            glow = Color(0x3356D4E8)
+        ),
+        AppTheme(
+            "space", "Space",
+            dark(0xFF0A0814, 0xFF171331, 0xFFB79CED, 0xFF0A0814, 0xFFEDE9F7, 0xFFA49CBD, 0xFF322A57, 0xFF6FD08C),
+            Color(0xFFB79CED),
+            backdrop = listOf(
+                Color(0xFF241847),
+                Color(0xFF150F2E),
+                Color(0xFF0C0919),
+                Color(0xFF05040C)
+            ),
+            glow = Color(0x38A187E8)
+        ),
+        AppTheme(
+            "citynight", "Night City",
+            dark(0xFF0D0A14, 0xFF1D1526, 0xFFFF7BC8, 0xFF120C18, 0xFFF3E9F3, 0xFFB09DB2, 0xFF3A2A45, 0xFF4CC9F0),
+            Color(0xFFFF7BC8),
+            backdrop = listOf(
+                Color(0xFF3A1B45),
+                Color(0xFF241432),
+                Color(0xFF150E1F),
+                Color(0xFF0D0A14)
+            ),
+            glow = Color(0x33FF7BC8)
         )
     )
 
@@ -184,9 +249,34 @@ private val AppTypography = Typography(
 
 @Composable
 fun RandomizerTheme(themeId: String, content: @Composable () -> Unit) {
+    val theme = Themes.byId(themeId)
     MaterialTheme(
-        colorScheme = Themes.byId(themeId).scheme,
-        typography = AppTypography,
-        content = content
-    )
+        colorScheme = theme.scheme,
+        typography = AppTypography
+    ) {
+        val stops = if (theme.backdrop.size >= 2) theme.backdrop
+        else listOf(theme.scheme.background, theme.scheme.background)
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Brush.verticalGradient(stops))
+        ) {
+            // Every screen paints its own Scaffold transparently so this shows
+            // through. The wash sits above the gradient and below the content.
+            theme.glow?.let { tint ->
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.radialGradient(
+                                colors = listOf(tint, Color.Transparent),
+                                radius = 900f
+                            )
+                        )
+                )
+            }
+            content()
+        }
+    }
 }

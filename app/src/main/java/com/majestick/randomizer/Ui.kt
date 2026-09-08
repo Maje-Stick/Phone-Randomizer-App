@@ -60,12 +60,15 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -83,6 +86,7 @@ fun ToolScaffold(
     content: @Composable () -> Unit
 ) {
     val haptics = LocalHapticFeedback.current
+    val focusManager = LocalFocusManager.current
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
@@ -102,6 +106,7 @@ fun ToolScaffold(
             Button(
                 onClick = {
                     DebugLog.log("action", "$title -> $actionLabel")
+                    focusManager.clearFocus()
                     haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                     onAction()
                 },
@@ -149,6 +154,7 @@ fun RepeatPressBox(
     val step by rememberUpdatedState(onStep)
     val active by rememberUpdatedState(enabled)
     val haptics = LocalHapticFeedback.current
+    val focus = LocalFocusManager.current
 
     LaunchedEffect(enabled) { DebugLog.trace("gesture", "$name enabled=$enabled") }
     DisposableEffect(Unit) {
@@ -161,6 +167,9 @@ fun RepeatPressBox(
             detectTapGestures(
                 onPress = {
                     DebugLog.trace("gesture", "$name DOWN (enabled=$active)")
+                    // Commits and dismisses any open number editor first, so the
+                    // button acts on the committed value instead of fighting it.
+                    focus.clearFocus()
                     if (active) {
                         step()
                         haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -169,7 +178,9 @@ fun RepeatPressBox(
                             var n = 0
                             while (active) {
                                 n++
-                                DebugLog.trace("gesture", "$name repeat #$n")
+                                if (n <= 3 || n % 10 == 0) {
+                                    DebugLog.trace("gesture", "$name repeat #$n")
+                                }
                                 step()
                                 delay(70)
                             }
@@ -207,6 +218,7 @@ fun RepeatIconButton(
     val step by rememberUpdatedState(onStep)
     val active by rememberUpdatedState(enabled)
     val haptics = LocalHapticFeedback.current
+    val focus = LocalFocusManager.current
 
     LaunchedEffect(enabled) { DebugLog.trace("gesture", "$description enabled=$enabled") }
     DisposableEffect(Unit) {
@@ -232,6 +244,7 @@ fun RepeatIconButton(
                 detectTapGestures(
                     onPress = {
                         DebugLog.trace("gesture", "$description DOWN (enabled=$active)")
+                        focus.clearFocus()
                         if (active) {
                             step()
                             haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -240,7 +253,9 @@ fun RepeatIconButton(
                                 var n = 0
                                 while (active) {
                                     n++
-                                    DebugLog.trace("gesture", "$description repeat #$n")
+                                    if (n <= 3 || n % 10 == 0) {
+                                        DebugLog.trace("gesture", "$description repeat #$n")
+                                    }
                                     step()
                                     delay(70)
                                 }
@@ -285,25 +300,31 @@ fun EditableNumber(
     modifier: Modifier = Modifier
 ) {
     var editing by remember { mutableStateOf(false) }
-    var buffer by remember { mutableStateOf("") }
+    var buffer by remember { mutableStateOf(TextFieldValue("")) }
     var gainedFocus by remember { mutableStateOf(false) }
     val focusRequester = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
+    val focus = LocalFocusManager.current
 
     val current by rememberUpdatedState(value)
     val callback by rememberUpdatedState(onValueChange)
 
     fun commit() {
-        val parsed = buffer.toIntOrNull()
-        DebugLog.trace("keypad", "number commit buffer='$buffer' parsed=$parsed")
+        val parsed = buffer.text.toIntOrNull()
+        DebugLog.trace("keypad", "number commit buffer='${buffer.text}' parsed=$parsed")
         parsed?.let { callback(it.coerceIn(min, max)) }
         editing = false
+        keyboard?.hide()
     }
 
     if (editing) {
         BasicTextField(
             value = buffer,
-            onValueChange = { raw -> buffer = raw.filter { it.isDigit() || it == '-' } },
+            onValueChange = { raw ->
+                val clean = raw.text.filter { it.isDigit() || it == '-' }
+                buffer = if (clean == raw.text) raw
+                else TextFieldValue(clean, TextRange(clean.length))
+            },
             singleLine = true,
             textStyle = TextStyle(
                 color = MaterialTheme.colorScheme.primary,
@@ -316,7 +337,10 @@ fun EditableNumber(
                 keyboardType = KeyboardType.Number,
                 imeAction = ImeAction.Done
             ),
-            keyboardActions = KeyboardActions(onDone = { commit() }),
+            keyboardActions = KeyboardActions(onDone = {
+                commit()
+                focus.clearFocus()
+            }),
             modifier = modifier
                 .focusRequester(focusRequester)
                 .onFocusChanged { state ->
@@ -348,7 +372,10 @@ fun EditableNumber(
             textAlign = TextAlign.Center,
             modifier = modifier.clickable {
                 DebugLog.trace("keypad", "number tapped, value=$current -> opening editor")
-                buffer = current.toString()
+                val start = current.toString()
+                // Caret at the end, not the start -- typing should extend the
+                // number the way it reads, not prepend to it.
+                buffer = TextFieldValue(start, TextRange(start.length))
                 gainedFocus = false
                 editing = true
             }

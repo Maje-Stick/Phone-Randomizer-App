@@ -35,10 +35,29 @@ object DebugLog {
     private const val KEY_VERBOSE = "verbose"
     private const val REPORT_FILE = "last_report.txt"
     private const val STALL_MS = 3000L
+    const val MARK_TAG = "MARK"
 
     private val stamp = SimpleDateFormat("HH:mm:ss.SSS", Locale.US)
-    private val lines = ArrayDeque<String>()
+    private val lines = ArrayDeque<LogLine>()
     private val lock = Any()
+    private var lastAt = 0L
+    private var marks = 0
+
+    /**
+     * [gapMs] is the time since the previous line. Timestamps alone read as if
+     * the log skips seconds; they do not, they only record moments something
+     * happened. The gap says how long the quiet lasted, which is the number that
+     * actually matters when hunting a stall.
+     */
+    data class LogLine(
+        val at: String,
+        val gapMs: Long,
+        val tag: String,
+        val message: String
+    ) {
+        fun format(): String =
+            "$at ${"+${gapMs}ms".padStart(9)}  ${tag.padEnd(11)}  $message"
+    }
 
     private var appContext: Context? = null
     private var prefs: SharedPreferences? = null
@@ -82,12 +101,26 @@ object DebugLog {
 
     fun log(tag: String, message: String) {
         val line = synchronized(lock) {
-            val text = "${stamp.format(Date())}  ${tag.padEnd(11)}  $message"
+            val now = SystemClock.uptimeMillis()
+            val gap = if (lastAt == 0L) 0L else now - lastAt
+            lastAt = now
+            val entry = LogLine(stamp.format(Date()), gap, tag, message)
             if (lines.size >= CAPACITY) lines.removeFirst()
-            lines.addLast(text)
-            text
+            lines.addLast(entry)
+            entry
         }
-        android.util.Log.d("Randomizer", line)
+        android.util.Log.d("Randomizer", line.format())
+    }
+
+    /**
+     * Drops a divider in the log. The workflow this exists for: mark, reproduce
+     * the bug, copy since the mark. That is a few dozen lines instead of a few
+     * thousand.
+     */
+    fun mark(): Int {
+        val n = synchronized(lock) { ++marks }
+        log(MARK_TAG, "======== mark $n ========")
+        return n
     }
 
     /** High-frequency tracing. Silent unless [verbose] is on. */
@@ -97,9 +130,25 @@ object DebugLog {
 
     // ---------------------------------------------------------------- reading
 
-    fun linesSnapshot(): List<String> = synchronized(lock) { lines.toList() }
+    fun linesSnapshot(): List<LogLine> = synchronized(lock) { lines.toList() }
 
-    fun text(): String = synchronized(lock) { lines.joinToString("\n") }
+    fun tags(): List<String> =
+        synchronized(lock) { lines.map { it.tag }.distinct().sorted() }
+
+    fun text(): String = synchronized(lock) { lines.joinToString("\n") { it.format() } }
+
+    /** Everything after the most recent [mark], or everything if there is none. */
+    fun textSinceMark(): String {
+        val all = linesSnapshot()
+        val start = all.indexOfLast { it.tag == MARK_TAG }
+        val slice = if (start < 0) all else all.subList(start, all.size)
+        return slice.joinToString("\n") { it.format() }
+    }
+
+    fun tail(count: Int): String =
+        linesSnapshot().takeLast(count).joinToString("\n") { it.format() }
+
+    fun hasMark(): Boolean = synchronized(lock) { lines.any { it.tag == MARK_TAG } }
 
     fun size(): Int = synchronized(lock) { lines.size }
 
@@ -127,7 +176,10 @@ object DebugLog {
     }
 
     fun clear() {
-        synchronized(lock) { lines.clear() }
+        synchronized(lock) {
+            lines.clear()
+            lastAt = 0L
+        }
         lastReport = null
         appContext?.let { runCatching { File(it.filesDir, REPORT_FILE).delete() } }
         log("debug", "log cleared")

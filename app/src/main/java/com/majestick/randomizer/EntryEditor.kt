@@ -46,11 +46,14 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -115,19 +118,21 @@ private fun WeightBar(
     barName: String = "weight"
 ) {
     var editing by remember { mutableStateOf(false) }
-    var buffer by remember { mutableStateOf("") }
+    var buffer by remember { mutableStateOf(TextFieldValue("")) }
     var gainedFocus by remember { mutableStateOf(false) }
     val focusRequester = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
+    val focus = LocalFocusManager.current
     val nudge by rememberUpdatedState(onNudge)
     val callback by rememberUpdatedState(onSetWeight)
     val shape = RoundedCornerShape(10.dp)
 
     fun commit() {
-        val parsed = buffer.toDoubleOrNull()
-        DebugLog.trace("keypad", "weight commit buffer='$buffer' parsed=$parsed")
+        val parsed = buffer.text.toDoubleOrNull()
+        DebugLog.trace("keypad", "weight commit buffer='${buffer.text}' parsed=$parsed")
         parsed?.let { callback(it.coerceIn(0.0, 9999.0)) }
         editing = false
+        keyboard?.hide()
     }
 
     Row(
@@ -168,7 +173,11 @@ private fun WeightBar(
             if (editing) {
                 BasicTextField(
                     value = buffer,
-                    onValueChange = { raw -> buffer = raw.filter { it.isDigit() || it == '.' } },
+                    onValueChange = { raw ->
+                        val clean = raw.text.filter { it.isDigit() || it == '.' }
+                        buffer = if (clean == raw.text) raw
+                        else TextFieldValue(clean, TextRange(clean.length))
+                    },
                     singleLine = true,
                     textStyle = TextStyle(
                         color = MaterialTheme.colorScheme.primary,
@@ -181,7 +190,10 @@ private fun WeightBar(
                         keyboardType = KeyboardType.Decimal,
                         imeAction = ImeAction.Done
                     ),
-                    keyboardActions = KeyboardActions(onDone = { commit() }),
+                    keyboardActions = KeyboardActions(onDone = {
+                        commit()
+                        focus.clearFocus()
+                    }),
                     modifier = Modifier
                         .fillMaxWidth()
                         .focusRequester(focusRequester)
@@ -219,7 +231,8 @@ private fun WeightBar(
                         .fillMaxHeight()
                         .clickable {
                             DebugLog.trace("keypad", "weight tapped, value=${trimNumber(weight)} -> opening editor")
-                            buffer = trimNumber(weight)
+                            val start = trimNumber(weight)
+                            buffer = TextFieldValue(start, TextRange(start.length))
                             gainedFocus = false
                             editing = true
                         }
@@ -391,9 +404,9 @@ fun EntryListEditor(
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        "Edit, reorder, add or delete lines here and Apply writes them back "
-                            + "to the rows. Weights travel with their text; a renamed or brand "
-                            + "new line starts at 1.",
+                        "Edit, reorder, rename, add or delete lines here and Apply writes "
+                            + "them back to the rows. Weights follow their row, so reordering "
+                            + "and renaming both keep them. Only a brand new line starts at 1.",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -413,18 +426,40 @@ fun EntryListEditor(
 }
 
 /**
- * Rebuilds the list from free text while keeping the weight already attached to
- * each piece of text, so editing the list as prose does not silently reset the
- * work done in the weight bars.
+ * Rebuilds the list from free text without throwing away the weights.
+ *
+ * Two passes, because text alone cannot say what happened. Pass one matches
+ * lines to old entries by exact text, each old entry claimed at most once --
+ * that covers reordering, where the same words moved. Pass two gives any
+ * still-unmatched line the weight of the old entry that sat at its position, if
+ * that entry was not already claimed -- that covers renaming in place, where
+ * the words changed but the row did not. Only a genuinely new line starts at 1.
  */
 private fun mergeFromText(text: String, previous: List<Entry>): List<Entry> {
-    val weights = HashMap<String, Double>()
-    previous.forEach { entry ->
-        if (entry.text.isNotBlank()) weights.putIfAbsent(entry.text, entry.weight)
-    }
     val lines = text.split('\n').map { it.trim() }.filter { it.isNotEmpty() }
     if (lines.isEmpty()) return listOf(Entry(""))
-    return lines.map { line -> Entry(line, weights[line] ?: 1.0) }
+
+    val unclaimed = previous.toMutableList()
+    val matched = arrayOfNulls<Entry>(lines.size)
+
+    lines.forEachIndexed { i, line ->
+        val hit = unclaimed.indexOfFirst { it.text == line }
+        if (hit >= 0) {
+            matched[i] = Entry(line, unclaimed[hit].weight)
+            unclaimed.removeAt(hit)
+        }
+    }
+
+    lines.forEachIndexed { i, line ->
+        if (matched[i] == null) {
+            val sameRow = previous.getOrNull(i)
+            if (sameRow != null && unclaimed.remove(sameRow)) {
+                matched[i] = Entry(line, sameRow.weight)
+            }
+        }
+    }
+
+    return lines.mapIndexed { i, line -> matched[i] ?: Entry(line, 1.0) }
 }
 
 private fun List<Entry>.updateAt(index: Int, transform: (Entry) -> Entry): List<Entry> =

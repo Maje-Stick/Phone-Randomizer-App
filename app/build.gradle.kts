@@ -6,14 +6,14 @@ plugins {
 
 android {
     namespace = "com.majestick.randomizer"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.majestick.randomizer"
         minSdk = 26
-        targetSdk = 35
-        versionCode = 27
-        versionName = "2.11.3"
+        targetSdk = 36
+        versionCode = 28
+        versionName = "2.12"
     }
 
     // The signing key is supplied by the environment, never by the repository.

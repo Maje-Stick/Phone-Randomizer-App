@@ -21,7 +21,7 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v5
         with:
-          gradle-version: '8.9'
+          gradle-version: '8.11.1'
 
       - name: Decode the signing keystore
         env:
@@ -39,16 +39,26 @@ jobs:
           fi
           echo "SIGNING_KEYSTORE_PATH=$RUNNER_TEMP/signing.p12" >> "$GITHUB_ENV"
 
-      - name: Build the debug APK
+      # Both outputs come from the release build type, so the APK you install is
+      # the same code path Play receives -- R8 and all. A debug APK would not
+      # exercise the shrinker at all, which is where release-only breakage hides.
+      - name: Build the release APK and bundle
         env:
           SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
           SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
           SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
-        run: gradle assembleDebug --no-daemon --stacktrace
+        run: gradle assembleRelease bundleRelease --no-daemon --stacktrace
 
       - name: Upload the APK
         uses: actions/upload-artifact@v5
         with:
-          name: randomizer-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+          name: randomizer-release-apk
+          path: app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+
+      - name: Upload the Play bundle
+        uses: actions/upload-artifact@v5
+        with:
+          name: randomizer-play-bundle
+          path: app/build/outputs/bundle/release/*.aab
           if-no-files-found: error
